@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import pydantic
+from alive_progress import alive_it
 
 from cxas_scrapi.core.apps import Apps
 from cxas_scrapi.core.sessions import Sessions
@@ -673,7 +674,7 @@ class SimulationEvals(Apps):
                 }
 
         if parallel <= 1:
-            for tc, run_idx in jobs:
+            for tc, run_idx in alive_it(jobs, title="Running Simulations"):
                 results.append(_run_job(tc, run_idx))
         else:
             max_workers = min(parallel, 25)
@@ -685,7 +686,10 @@ class SimulationEvals(Apps):
                     )
                     for tc, run_idx in jobs
                 }
-                for future in as_completed(futures):
+                for future in alive_it(
+                    as_completed(futures), total=len(futures),
+                    title="Running Simulations"
+                ):
                     results.append(future.result())
 
         return results
