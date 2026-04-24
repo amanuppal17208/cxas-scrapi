@@ -34,6 +34,7 @@ from cxas_scrapi.core.tools import Tools
 from cxas_scrapi.prompts import llm_user_prompts
 from cxas_scrapi.utils.eval_utils import (
     Conversation as GoldenConversation,
+    Conversations as GoldenConversations,
     ExpectationResult,
     ExpectationStatus,
     ToolCall,
