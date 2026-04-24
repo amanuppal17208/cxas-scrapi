@@ -14,7 +14,9 @@
 
 import unittest
 from unittest.mock import MagicMock, patch
+
 from cxas_scrapi.evals.simulation_evals import SimulationEvals
+
 
 class MockProto:
     def __init__(self, data):
@@ -26,19 +28,24 @@ class MockProto:
 class TestSimToGolden(unittest.TestCase):
     def setUp(self):
         self.app_name = "projects/p/locations/l/apps/a"
-        
-        # Create instance without calling __init__ to avoid complex dependency mocking
+
+        # Create instance without calling __init__ to avoid complex dependency
+        # mocking
         self.sim_evals = MagicMock(spec=SimulationEvals)
         self.sim_evals.app_name = self.app_name
         self.sim_evals.creds = MagicMock()
-        
+
         # Bind the real method to the mock instance
-        self.sim_evals.export_results_to_golden = SimulationEvals.export_results_to_golden.__get__(self.sim_evals, SimulationEvals)
+        self.sim_evals.export_results_to_golden = (
+            SimulationEvals.export_results_to_golden.__get__(
+                self.sim_evals, SimulationEvals
+            )
+        )
 
     @patch('cxas_scrapi.evals.simulation_evals.ConversationHistory')
     def test_export_results_to_golden(self, mock_ch_class):
         mock_ch = mock_ch_class.return_value
-        
+
         # Mock conversation data
         mock_conv_data = {
             "turns": [
@@ -53,23 +60,35 @@ class TestSimToGolden(unittest.TestCase):
                         {"role": "user", "chunks": [{"text": "how are you?"}]},
                         {"role": "agent", "chunks": [
                             {"text": "I am good,"},
-                            {"tool_call": {"display_name": "get_weather", "args": {"city": "London"}}}
+                            {
+                                "tool_call": {
+                                    "display_name": "get_weather",
+                                    "args": {"city": "London"}
+                                }
+                            }
                         ]}
                     ]
                 },
                 {
                     "messages": [
                         {"role": "get_weather", "chunks": [
-                            {"tool_response": {"display_name": "get_weather", "response": {"temp": 20}}}
+                            {
+                                "tool_response": {
+                                    "display_name": "get_weather",
+                                    "response": {"temp": 20}
+                                }
+                            }
                         ]},
-                        {"role": "agent", "chunks": [{"text": "It is 20 degrees."}]}
+                        {"role": "agent", "chunks": [
+                            {"text": "It is 20 degrees."}
+                        ]}
                     ]
                 }
             ]
         }
-        
+
         mock_ch.get_conversation.return_value = MockProto(mock_conv_data)
-        
+
         results = [
             {
                 "session_id": "session1",
@@ -78,11 +97,15 @@ class TestSimToGolden(unittest.TestCase):
                 "session_parameters": {"key": "val"}
             }
         ]
-        
-        # We need to mock Sessions._expand_pb_struct as it's called in the method
-        with patch('cxas_scrapi.core.sessions.Sessions._expand_pb_struct', side_effect=lambda x: x):
+
+        # We need to mock Sessions._expand_pb_struct as it's called in the
+        # method
+        with patch(
+            'cxas_scrapi.core.sessions.Sessions._expand_pb_struct',
+            side_effect=lambda x: x
+        ):
             yaml_output = self.sim_evals.export_results_to_golden(results)
-            
+
             # Basic checks on generated YAML
             self.assertIn("user: hello", yaml_output)
             self.assertIn("agent: hi there", yaml_output)
