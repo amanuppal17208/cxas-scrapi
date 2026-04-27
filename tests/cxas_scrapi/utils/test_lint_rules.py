@@ -172,6 +172,153 @@ def test_i008_valid_agent_ref(tmp_path, context):
     assert len(results) == 0
 
 
+def test_i014_no_date_anywhere(tmp_path, context):
+    """No current_date in global or any instruction → flag."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    agent_dir = tmp_path / "agents" / "root_agent"
+    agent_dir.mkdir(parents=True)
+    f = agent_dir / "instruction.txt"
+    content = "Just some instructions."
+    f.write_text(content)
+
+    results = rule.check(f, content, context)
+    assert len(results) == 1
+    assert "No current_date reference" in results[0].message
+
+
+def test_i014_in_global_only(tmp_path, context):
+    """current_date in global_instruction.txt → no flag on agent."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    (tmp_path / "global_instruction.txt").write_text(
+        "Today is ${current_date}."
+    )
+    f = tmp_path / "instruction.txt"
+    f.write_text("No date here.")
+
+    results = rule.check(f, f.read_text(), context)
+    assert len(results) == 0
+
+
+def test_i014_in_global_and_agent(tmp_path, context):
+    """current_date in both global and agent → no flag."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    (tmp_path / "global_instruction.txt").write_text(
+        "Today is ${current_date}."
+    )
+    f = tmp_path / "instruction.txt"
+    f.write_text("Date: ${current_date}.")
+
+    results = rule.check(f, f.read_text(), context)
+    assert len(results) == 0
+
+
+def test_i014_in_all_agents_not_global(tmp_path, context):
+    """current_date in all agent instructions but not global → no flag."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    # Two agents, both have current_date
+    for name in ("agent_a", "agent_b"):
+        d = tmp_path / "agents" / name
+        d.mkdir(parents=True)
+        (d / "instruction.txt").write_text("Date: ${current_date}.")
+    # Global does not have it
+    gi = tmp_path / "global_instruction.txt"
+    gi.write_text("No date here.")
+
+    results = rule.check(gi, gi.read_text(), context)
+    assert len(results) == 0
+
+
+def test_i014_in_some_agents_not_global(tmp_path, context):
+    """current_date in one agent but not another, not global → flag both."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    # agent_a has it, agent_b does not
+    a = tmp_path / "agents" / "agent_a"
+    a.mkdir(parents=True)
+    (a / "instruction.txt").write_text("Date: ${current_date}.")
+    b = tmp_path / "agents" / "agent_b"
+    b.mkdir(parents=True)
+    (b / "instruction.txt").write_text("No date here.")
+    # Global does not have it
+    gi = tmp_path / "global_instruction.txt"
+    gi.write_text("No date here.")
+
+    # global_instruction.txt should be flagged
+    results_gi = rule.check(gi, gi.read_text(), context)
+    assert len(results_gi) == 1
+
+    # agent_b should be flagged
+    f_b = b / "instruction.txt"
+    results_b = rule.check(f_b, f_b.read_text(), context)
+    assert len(results_b) == 1
+
+    # agent_a should NOT be flagged (it has current_date)
+    f_a = a / "instruction.txt"
+    results_a = rule.check(f_a, f_a.read_text(), context)
+    assert len(results_a) == 0
+
+
+def test_i014_accepts_double_brace_syntax(tmp_path, context):
+    """${{current_date}} syntax is also valid."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    f = tmp_path / "global_instruction.txt"
+    f.write_text("Today is ${{current_date}}.")
+
+    results = rule.check(f, f.read_text(), context)
+    assert len(results) == 0
+
+
+def test_i014_skips_non_instruction_files(tmp_path, context):
+    """Rule only applies to instruction.txt and global_instruction.txt."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    f = tmp_path / "python_code.py"
+    f.write_text("# no date here")
+
+    results = rule.check(f, f.read_text(), context)
+    assert len(results) == 0
+
+
+def test_i014_no_global_instruction_file(tmp_path, context):
+    """No global_instruction.txt exists, agent missing date → flag."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    agent_dir = tmp_path / "agents" / "root_agent"
+    agent_dir.mkdir(parents=True)
+    f = agent_dir / "instruction.txt"
+    f.write_text("No date here.")
+
+    results = rule.check(f, f.read_text(), context)
+    assert len(results) == 1
+
+
+def test_i014_no_agents_directory(tmp_path, context):
+    """No agents/ dir, global missing date → flag global."""
+    from cxas_scrapi.utils.lint_rules.instructions import MissingCurrentDate  # noqa: PLC0415,I001
+
+    rule = MissingCurrentDate()
+    f = tmp_path / "global_instruction.txt"
+    f.write_text("No date here.")
+
+    results = rule.check(f, f.read_text(), context)
+    # No agents dir means _all_agent_instructions_have_date returns True
+    # (vacuously), so global is not flagged
+    assert len(results) == 0
+
+
 # ── Callback Rules ───────────────────────────────────────────────────────
 
 

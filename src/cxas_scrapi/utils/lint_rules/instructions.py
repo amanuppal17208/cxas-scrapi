@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Instruction lint rules (I001-I013).
+"""Instruction lint rules (I001-I014).
 
 Validates agent instruction files against GECX design guide best practices.
 """
@@ -521,4 +521,72 @@ class ToolNotInConfig(Rule):
                 fix=f"Add '{ref}' to tools array, or remove the reference.",
             )
             for ref in sorted(missing)
+        ]
+
+
+@rule("instructions")
+class MissingCurrentDate(Rule):
+    id = "I014"
+    name = "missing-current-date"
+    description = (
+        "Instruction should reference ${current_date} so the"
+        " agent knows today's date"
+    )
+    default_severity = Severity.WARNING
+
+    VALID_PATTERNS = re.compile(r"\$\{current_date\}|\$\{\{current_date\}\}")
+
+    _APPLICABLE_FILES = {"instruction.txt", "global_instruction.txt"}
+
+    def _global_instruction_has_date(self, context: LintContext) -> bool:
+        """Check if global_instruction.txt already references current_date."""
+        global_inst = context.app_dir / "global_instruction.txt"
+        if global_inst.exists():
+            return bool(self.VALID_PATTERNS.search(global_inst.read_text()))
+        return False
+
+    def _all_agent_instructions_have_date(self, context: LintContext) -> bool:
+        """Check if every agent instruction.txt references current_date."""
+        agents_dir = context.app_dir / "agents"
+        if not agents_dir.exists():
+            return True
+        for agent_dir in sorted(agents_dir.iterdir()):
+            if not agent_dir.is_dir():
+                continue
+            inst = agent_dir / "instruction.txt"
+            if inst.exists() and not self.VALID_PATTERNS.search(
+                inst.read_text()
+            ):
+                return False
+        return True
+
+    def check(
+        self, file_path: Path, content: str, context: LintContext
+    ) -> list[LintResult]:
+        if file_path.name not in self._APPLICABLE_FILES:
+            return []
+        if self.VALID_PATTERNS.search(content):
+            return []
+        # global_instruction.txt has current_date → all agents covered
+        if self._global_instruction_has_date(context):
+            return []
+        # Every agent instruction.txt has current_date → also fine
+        if self._all_agent_instructions_have_date(context):
+            return []
+        rel = str(file_path.relative_to(context.project_root))
+        return [
+            self.make_result(
+                file=rel,
+                message=(
+                    "No current_date reference found"
+                    " — without it the agent will"
+                    " not know today's date"
+                ),
+                fix=(
+                    "Add ${current_date} or"
+                    " ${{current_date}} to the"
+                    " instruction or global"
+                    " instruction"
+                ),
+            )
         ]
