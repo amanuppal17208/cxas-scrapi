@@ -398,6 +398,13 @@ class Discovery:
                     return d
         return None
 
+    def discover_global_instruction(self) -> Optional[Path]:
+        """Return path to ``global_instruction.txt`` if it exists."""
+        if not self.app_root:
+            return None
+        p = self.app_root / "global_instruction.txt"
+        return p if p.exists() else None
+
     def discover_agents(self) -> dict[str, Path]:
         """Return ``{dir_name: instruction_or_config_path}`` for all agents."""
         if not self.app_root:
@@ -625,12 +632,15 @@ def run_rules(  # noqa: C901
             r for r in registry.rules_for_category(category) if should_run(r)
         ]
 
-    # Instructions — only instruction.txt files
+    # Instructions — instruction.txt files + global_instruction.txt
     instruction_files = {
         k: v
         for k, v in discovery.discover_agents().items()
         if v.name == "instruction.txt"
     }
+    global_inst = discovery.discover_global_instruction()
+    if global_inst:
+        instruction_files["global_instruction"] = global_inst
     _lint_files(_get_rules("instructions"), instruction_files)
 
     # Callbacks
