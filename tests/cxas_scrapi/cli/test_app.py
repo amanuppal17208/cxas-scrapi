@@ -27,7 +27,8 @@ from cxas_scrapi.cli import app as cli_app
 
 @pytest.fixture
 def mock_apps_client():
-    with mock.patch("cxas_scrapi.cli.app.Apps", autospec=True) as mock_apps_class:
+    with mock.patch(
+        "cxas_scrapi.cli.app.Apps", autospec=True) as mock_apps_class:
         mock_instance = mock_apps_class.return_value
         yield mock_instance
 
