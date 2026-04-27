@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 def _resolve_app_args(
     app_identifier: str, args: argparse.Namespace
 ) -> tuple[Apps, str, str]:
-    """Resolves project, location, Apps client, app_id, and display_name."""
+    """Resolves project, location, Apps client, app_name, and display_name."""
     project_id = (
         Common._get_project_id(app_identifier)
         if Common._get_project_id(app_identifier)
@@ -54,19 +54,19 @@ def _resolve_app_args(
         sys.exit(1)
 
     apps_client = Apps(project_id=project_id, location=location)
-    app_id = app_identifier
+    app_name = app_identifier
     display_name = app_identifier
 
     if "projects/" not in app_identifier:
         app = apps_client.get_app_by_display_name(app_identifier)
         if app:
-            app_id = app.name
+            app_name = app.name
             display_name = app.display_name
         else:
             print(f"App '{app_identifier}' not found.")
             sys.exit(1)
 
-    return apps_client, app_id, display_name
+    return apps_client, app_name, display_name
 
 
 def _handle_import_result(result: Any, success_verb: str) -> Optional[str]:
@@ -89,17 +89,17 @@ def app_pull(args: argparse.Namespace) -> None:
     """Handles the 'pull' command."""
     print(f"Pulling app: {args.app}")
 
-    apps_client, app_id, _ = _resolve_app_args(args.app, args)
+    apps_client, app_name, _ = _resolve_app_args(args.app, args)
 
-    _app_pull(apps_client, app_id, args.target_dir)
+    _app_pull(apps_client, app_name, args.target_dir)
 
 
-def _app_pull(apps_client: Apps, app_id: str, target_dir: str) -> None:
+def _app_pull(apps_client: Apps, app_name: str, target_dir: str) -> None:
     """Helper to pull an app from CXAS."""
     try:
         # Export the app
         print("Exporting app from CXAS...")
-        lro = apps_client.export_app(app_name=app_id)
+        lro = apps_client.export_app(app_name=app_name)
         response = lro.result()
 
         # Determine the target directory
@@ -217,7 +217,7 @@ def _app_push(
             if "apps/" in target_app_id:
                 target_app_id = target_app_id.rsplit("apps/", maxsplit=1)[-1]
             result = apps_client.import_app(
-                app_name=target_app_id, app_content=app_content
+                app_name=target_app_name, app_content=app_content
             )
         else:
             result = apps_client.import_as_new_app(
@@ -260,12 +260,12 @@ def app_delete(args: argparse.Namespace) -> None:
         print(f"Deleting App: {app_name_arg}")
         project_id = Common._get_project_id(app_name_arg)
         location = Common._get_location(app_name_arg)
-        app_id = app_name_arg
+        app_name = app_name_arg
     elif args.display_name and args.project_id and args.location:
         print(f"Deleting App by Display Name: {args.display_name}")
         project_id = args.project_id
         location = args.location
-        app_id = None
+        app_name = None
     else:
         print(
             "Error: Must provide either --app_name OR "
@@ -280,12 +280,12 @@ def app_delete(args: argparse.Namespace) -> None:
     apps_client = Apps(project_id=project_id, location=location)
 
     try:
-        if not app_id:
+        if not app_name:
             # Lookup by display name
             app = apps_client.get_app_by_display_name(args.display_name)
             if app:
-                app_id = app.name
-                print(f"Found app ID: {app_id}")
+                app_name = app.name
+                print(f"Found app ID: {app_name}")
             else:
                 print(
                     f"App with display name '{args.display_name}' "
@@ -293,8 +293,8 @@ def app_delete(args: argparse.Namespace) -> None:
                 )
                 return
 
-        apps_client.delete_app(app_name=app_id, force=args.force)
-        print(f"Successfully deleted {app_id}")
+        apps_client.delete_app(app_name=app_name, force=args.force)
+        print(f"Successfully deleted {app_name}")
     except Exception as e:
         print(f"Failed to delete app: {e}")
         sys.exit(1)
@@ -370,10 +370,10 @@ def apps_get(args: argparse.Namespace) -> None:
     """Handles the 'apps get' command."""
     print(f"Getting app: {args.app}")
 
-    apps_client, app_id, _ = _resolve_app_args(args.app, args)
+    apps_client, app_name, _ = _resolve_app_args(args.app, args)
 
     try:
-        app = apps_client.get_app(app_id=app_id)
+        app = apps_client.get_app(app_name=app_name)
         print("\nApp Details:")
         print(f"Name: {app.name}")
         print(f"Display Name: {app.display_name}")
