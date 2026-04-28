@@ -27,7 +27,8 @@ from cxas_scrapi.cli import app as cli_app
 
 @pytest.fixture
 def mock_apps_client():
-    with mock.patch("cxas_scrapi.cli.app.Apps") as mock_apps_class:
+    with mock.patch(
+        "cxas_scrapi.cli.app.Apps", autospec=True) as mock_apps_class:
         mock_instance = mock_apps_class.return_value
         yield mock_instance
 
@@ -36,6 +37,7 @@ def mock_apps_client():
 def mock_common_get_project_id():
     with mock.patch(
         "cxas_scrapi.cli.app.Common._get_project_id",
+        autospec=True,
         return_value="dummy-project",
     ) as m:
         yield m
@@ -45,6 +47,7 @@ def mock_common_get_project_id():
 def mock_common_get_location():
     with mock.patch(
         "cxas_scrapi.cli.app.Common._get_location",
+        autospec=True,
         return_value="dummy-location",
     ) as m:
         yield m
@@ -117,7 +120,7 @@ def test_apps_get(
     cli_app.apps_get(args)
 
     mock_apps_client.get_app.assert_called_once_with(
-        app_id="projects/test-project/locations/us/apps/123"
+        app_name="projects/test-project/locations/us/apps/123"
     )
     captured = capsys.readouterr()
     assert "My App" in captured.out
