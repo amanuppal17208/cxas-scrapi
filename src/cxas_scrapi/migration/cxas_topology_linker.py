@@ -16,7 +16,7 @@ import logging
 import re
 from typing import Any, Dict, Set
 
-from cxas_scrapi.migration.data_models import MigrationIR, MigrationStatus
+from cxas_scrapi.migration.data_models import DFCXAgentIR, MigrationIR, MigrationStatus
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class CXASTopologyLinker:
         ir: MigrationIR,
         deployed_agent_map: Dict[str, str],
         dfcx_id_to_display_name: Dict[str, str],
-        source_agent_data: Dict[str, Any],
+        source_agent_data: DFCXAgentIR,
         ps_agents: Any,
         reporter: Any,
     ):
@@ -79,15 +79,13 @@ class CXASTopologyLinker:
                     flow_obj = next(
                         (
                             f
-                            for f in source_agent_data.get("flows", [])
-                            if f.get("flow", f)
-                            .get("name", "")
-                            .endswith(child_uuid)
+                            for f in source_agent_data.flows
+                            if f.flow_id.endswith(child_uuid)
                         ),
                         None,
                     )
                     if flow_obj:
-                        child_display_name = flow_obj.get("flow", flow_obj).get(
+                        child_display_name = flow_obj.flow_data.get(
                             "displayName"
                         )
 
@@ -193,7 +191,7 @@ class CXASTopologyLinker:
             )
 
     def link_and_finalize_topology(
-        self, ir: MigrationIR, source_agent_data: Dict[str, Any]
+        self, ir: MigrationIR, source_agent_data: DFCXAgentIR
     ):
         """Extracts routing dependencies and sets parent/child links with
         circular reference protection.
@@ -210,7 +208,7 @@ class CXASTopologyLinker:
 
         # Create a reverse map for DFCX ID -> Display Name
         dfcx_id_to_display_name = {}
-        for pb in source_agent_data.get("playbooks", []):
+        for pb in source_agent_data.playbooks:
             dfcx_id_to_display_name[pb["name"]] = pb["displayName"]
 
         processed_nodes = set()
@@ -232,8 +230,8 @@ class CXASTopologyLinker:
 
         # 3. Set Root Agent
         logger.info("\nConfiguring Root Agent...")
-        start_playbook_id = source_agent_data.get("startPlaybook")
-        start_flow_id = source_agent_data.get("startFlow")
+        start_playbook_id = source_agent_data.start_playbook
+        start_flow_id = source_agent_data.start_flow
 
         root_display_name = None
         if start_playbook_id:
@@ -241,7 +239,7 @@ class CXASTopologyLinker:
             pb_obj = next(
                 (
                     pb
-                    for pb in source_agent_data.get("playbooks", [])
+                    for pb in source_agent_data.playbooks
                     if pb["name"].split("/")[-1] == start_uuid
                 ),
                 None,
@@ -253,14 +251,13 @@ class CXASTopologyLinker:
             flow_wrapper = next(
                 (
                     f
-                    for f in source_agent_data.get("flows", [])
-                    if f.get("flow", f).get("name", "").split("/")[-1]
-                    == start_uuid
+                    for f in source_agent_data.flows
+                    if f.flow_id.split("/")[-1] == start_uuid
                 ),
                 None,
             )
             if flow_wrapper:
-                root_display_name = flow_wrapper.get("flow", flow_wrapper).get(
+                root_display_name = flow_wrapper.flow_data.get(
                     "displayName"
                 )
 

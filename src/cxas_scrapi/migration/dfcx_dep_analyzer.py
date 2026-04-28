@@ -18,11 +18,13 @@ import json
 import re
 from typing import Any, Dict, List, Tuple
 
+from cxas_scrapi.migration.data_models import DFCXAgentIR
+
 
 class DependencyAnalyzer:
     """Analyzes references between DFCX resources."""
 
-    def __init__(self, agent_data: Dict[str, Any]):
+    def __init__(self, agent_data: DFCXAgentIR):
         self.data = agent_data
         self.id_map = {}  # DisplayName -> FullName
         self.name_map = {}  # FullName -> DisplayName
@@ -46,10 +48,10 @@ class DependencyAnalyzer:
                 self.graph[name] = set()
                 self.reverse_graph[name] = set()
 
-        for pb in self.data.get("playbooks", []):
+        for pb in self.data.playbooks:
             reg(pb, "Playbook")
-        for flow in self.data.get("flows", []):
-            f = flow.get("flow_data", flow)
+        for flow in self.data.flows:
+            f = flow.flow_data
             reg(f, "Flow")
 
     def _add_edge(self, source_id: str, target_identifier: str):
@@ -74,7 +76,7 @@ class DependencyAnalyzer:
     def _build_graph(self):
         """Scans all resources to build dependency graph."""
         # 1. Scan Playbooks
-        for pb in self.data.get("playbooks", []):
+        for pb in self.data.playbooks:
             pb_id = pb.get("name")
 
             # Explicit lists
@@ -89,8 +91,8 @@ class DependencyAnalyzer:
             self._scan_text_for_refs(pb_id, steps_str)
 
         # 2. Scan Flows
-        for flow_wrapper in self.data.get("flows", []):
-            flow = flow_wrapper.get("flow_data", flow_wrapper)
+        for flow_wrapper in self.data.flows:
+            flow = flow_wrapper.flow_data
             flow_id = flow.get("name")
 
             # Transition Routes (Flow Level)
@@ -104,8 +106,8 @@ class DependencyAnalyzer:
                     self._add_edge(flow_id, handler["targetFlow"])
 
             # Pages (Transition Routes)
-            for page in flow_wrapper.get("pages", []):
-                p_val = page.get("value", page)
+            for page in flow_wrapper.pages:
+                p_val = page.page_data
                 for route in p_val.get("transitionRoutes", []):
                     if "targetFlow" in route:
                         self._add_edge(flow_id, route["targetFlow"])

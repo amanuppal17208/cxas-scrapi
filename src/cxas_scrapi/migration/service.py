@@ -58,8 +58,9 @@ class MigrationService:
         self,
         project_id: str,
         location: str = "global",
+        gemini_location: str = "global",
         credentials=None,
-        default_model: str = "gemini-3.1-flash-lite-preview",
+        default_model: str = "gemini-3-flash-preview",
         ps_apps_client: Any = None,
         ps_agents_client: Any = None,
         ps_tools_client: Any = None,
@@ -72,17 +73,25 @@ class MigrationService:
         self.credentials = credentials
         self.default_model = default_model
 
-        self.ps_apps = ps_apps_client
+        if ps_apps_client is None:
+            from cxas_scrapi.core.apps import Apps
+            self.ps_apps = Apps(project_id=self.project_id, location=self.location)
+        else:
+            self.ps_apps = ps_apps_client
         self.ps_agents = ps_agents_client
         self.ps_tools = ps_tools_client
         self.ps_toolsets = ps_toolsets_client
-        self.secret_manager = secret_manager_client
+        if secret_manager_client is None:
+            from cxas_scrapi.utils.secret_manager_utils import SecretManagerUtils
+            self.secret_manager = SecretManagerUtils(project_id=self.project_id)
+        else:
+            self.secret_manager = secret_manager_client
         self.cx_api = cx_api_client
 
         # Initialize internal clients
         self.gemini_client = GeminiGenerate(
             project_id=project_id,
-            location=location,
+            location=gemini_location,
             credentials=credentials,
             model_name=default_model,
         )
@@ -131,6 +140,8 @@ class MigrationService:
             )
             return
 
+
+
         logger.info(f"Starting Hybrid Migration for: {config.target_name}")
 
         # --- 1. Populate IR Metadata & Predictable IDs ---
@@ -160,7 +171,7 @@ class MigrationService:
 
         # --- 2. Async Playbook Description Generation ---
         logger.info("Generating Playbook descriptions concurrently...")
-        playbooks = self.source_agent_data.get("playbooks", [])
+        playbooks = self.source_agent_data.playbooks
         playbook_descriptions = {}
         if playbooks:
             tasks = [
@@ -190,7 +201,7 @@ class MigrationService:
 
         # --- 4. Populate Standard Tools & Webhooks into IR ---
         logger.info("Processing Standard Tools and Webhooks...")
-        for cx_tool in self.source_agent_data.get("tools", []):
+        for cx_tool in self.source_agent_data.tools:
             res = self.tool_converter.convert_cx_tool_to_ps_resource(cx_tool)
             if res:
                 self.ir.tools[res["id"]] = IRTool(
@@ -202,7 +213,7 @@ class MigrationService:
                     status=MigrationStatus.COMPILED,
                 )
 
-        for cx_webhook in self.source_agent_data.get("webhooks", []):
+        for cx_webhook in self.source_agent_data.webhooks:
             res = self.tool_converter.convert_webhook_to_openapi_toolset(
                 cx_webhook
             )
@@ -218,7 +229,7 @@ class MigrationService:
 
         # --- 5. Extract Code Blocks ---
         logger.info("Extracting and rewriting Python Code Blocks into IR...")
-        code_blocks = self.source_agent_data.get("codeBlocks", [])
+        code_blocks = self.source_agent_data.code_blocks
         master_inline_action_map = {}
         existing_tool_ids = set(self.ir.tools.keys())
         migrated_function_names = set()
@@ -295,7 +306,7 @@ class MigrationService:
         await self._deploy_pending_agents()
 
         # --- 8. Background Processing for Flows (Phase 2) ---
-        flows = self.source_agent_data.get("flows", [])
+        flows = self.source_agent_data.flows
         if flows:
             logger.info(
                 f"\nLaunching parallel Analysis & Architecture for "
@@ -336,6 +347,14 @@ class MigrationService:
                 return
             self.deployment_state["app_created"] = True
             logger.info(f"   -> App Created: {full_app_name}")
+            if self.ps_agents is None:
+                from cxas_scrapi.core.agents import Agents
+                self.ps_agents = Agents(app_name=full_app_name)
+                self.topology_linker.ps_agents = self.ps_agents
+            if self.ps_tools is None:
+                from cxas_scrapi.core.tools import Tools
+                self.ps_tools = Tools(app_name=full_app_name)
+                self.code_block_migrator.ps_tools = self.ps_tools
 
         # 2. Deploy Variables
         if not self.deployment_state.get("vars_deployed"):
@@ -343,7 +362,7 @@ class MigrationService:
             if vars_list:
                 logger.info(f"Deploying {len(vars_list)} Global Variables...")
                 self.ps_apps.update_app(
-                    app_id=full_app_name, variableDeclarations=vars_list
+                    full_app_name, variable_declarations=vars_list
                 )
             self.deployment_state["vars_deployed"] = True
 
@@ -366,23 +385,27 @@ class MigrationService:
 
                 if res_type == "TOOLSET":
                     logger.info(f"  Creating Toolset: '{display_name}'...")
-                    new_res = self.ps_toolsets.create_toolset(
-                        app_id=full_app_name,
-                        toolset_id=tool_id,
-                        toolset_data=payload,
+                    new_res = self.ps_tools.create_tool(
+                        tool_id=tool_id,
+                        display_name=display_name,
+                        payload=payload["open_api_toolset"],
+                        tool_type="open_api_toolset",
+                        description=payload.get("description", ""),
                     )
                 else:
                     logger.info(f"  Creating Tool: '{display_name}'...")
                     new_res = self.ps_tools.create_tool(
-                        app_id=full_app_name,
                         tool_id=tool_id,
-                        tool_data=payload,
+                        display_name=display_name,
+                        payload=payload.get("data_store_tool", {}),
+                        tool_type="data_store_tool",
+                        description=payload.get("description", ""),
                     )
 
-                if new_res and "name" in new_res:
+                if new_res and hasattr(new_res, "name"):
                     tool.status = MigrationStatus.DEPLOYED
                     self.reporter.log_tool(
-                        res_type, display_name, new_res["name"]
+                        res_type, display_name, new_res.name
                     )
                 else:
                     logger.error(
@@ -564,24 +587,33 @@ class MigrationService:
                     "instruction": agent.instruction,
                     "tools": resolved_tools,
                     "toolsets": resolved_toolsets,
-                    "modelSettings": agent.model_settings
+                    "model_settings": agent.model_settings
                     or {"model": default_model},
                 }
                 ps_agent_payload.update(callback_payload)
 
+                ps_agent_payload.pop("display_name", None)
+                model_to_use = default_model
+                if "model_settings" in ps_agent_payload:
+                    ms = ps_agent_payload.pop("model_settings")
+                    if isinstance(ms, dict) and "model" in ms:
+                        model_to_use = ms["model"]
+                    elif hasattr(ms, "model"):
+                        model_to_use = ms.model
+
                 new_ps_agent = self.ps_agents.create_agent(
-                    app_id=full_app_name, agent_obj=ps_agent_payload
+                    display_name=display_name,
+                    model=model_to_use,
+                    **ps_agent_payload
                 )
 
-                if new_ps_agent and "name" in new_ps_agent:
+                if new_ps_agent and hasattr(new_ps_agent, "name"):
                     logger.info("    -> Success!")
                     agent.status = MigrationStatus.DEPLOYED
-                    agent.resource_name = new_ps_agent[
-                        "name"
-                    ]  # Save deployed API name for linking
+                    agent.resource_name = new_ps_agent.name  # Save deployed API name for linking
                     self.reporter.log_agent(
                         display_name,
-                        new_ps_agent["name"],
+                        new_ps_agent.name,
                         ps_agent_payload["description"],
                         default_model,
                     )
@@ -667,9 +699,7 @@ class MigrationService:
         """Processes a single DFCX flow: resolves dependencies, visualizes,
         generates instructions and tools, and deploys them.
         """
-        flow_name = flow_wrapper.get("flow", flow_wrapper).get(
-            "displayName", "Unnamed"
-        )
+        flow_name = flow_wrapper.flow_data.get("displayName", "Unnamed")
 
         logger.info(f"[{flow_name}] Starting processing...")
 
@@ -678,10 +708,10 @@ class MigrationService:
         viz = FlowTreeVisualizer(context_data)
 
         buf = io.StringIO()
-        Console(
-            file=buf, width=200, force_terminal=False, color_system=None
-        ).print(viz.build_tree())
+        console = Console(file=buf)
+        console.print(viz.build_tree())
         tree_view = buf.getvalue()
+        print(f">>> DEBUG: tree_view len: {len(tree_view)}")
 
         # Step 2A: Architecture Expert Blueprinting
         blueprint_2a = await self.designer.run_step_2a(
@@ -759,9 +789,10 @@ class MigrationService:
                 )
                 try:
                     created_tool = self.ps_tools.create_tool(
-                        app_id=target_app_resource_name,
                         tool_id=safe_tool_id,
-                        tool_data=tool_payload,
+                        display_name=tool_name,
+                        payload=tool_payload["pythonFunction"],
+                        tool_type="python_function",
                     )
                     if created_tool:
                         self.ir.tools[
@@ -775,9 +806,9 @@ class MigrationService:
 
             # 1.5 MISSING LOGIC RESTORATION
             valid_display_names = {
-                re.sub(r"[_\\-]+", " ", agent["display_name"])
+                re.sub(r"[_\\-]+", " ", agent.display_name)
                 .strip()
-                .lower(): agent["display_name"]
+                .lower(): agent.display_name
                 for agent in self.ir.agents.values()
             }
 
@@ -875,27 +906,29 @@ class MigrationService:
                     )
                     callback_payload[camel_key] = [{"pythonCode": cb_code}]
 
+            display_name = self.ir.agents[flow_name].display_name
             agent_payload = {
-                "display_name": self.ir.agents[flow_name].display_name,
                 "description": self.ir.agents[flow_name].description,
                 "instruction": self.ir.agents[flow_name].instruction,
                 "tools": self.ir.agents[flow_name].tools,
                 "toolsets": self.ir.agents[flow_name].toolsets,
-                "modelSettings": {"model": self.default_model},
+                "model_settings": {"model": self.default_model},
             }
             agent_payload.update(callback_payload)
 
             try:
                 new_agent = self.ps_agents.create_agent(
-                    app_id=target_app_resource_name, agent_obj=agent_payload
+                    display_name=display_name,
+                    model=self.default_model,
+                    **agent_payload
                 )
-                if new_agent and "name" in new_agent:
+                if new_agent and hasattr(new_agent, "name"):
                     logger.info(f"[{flow_name}] -> Success! Deployed Agent.")
                     self.ir.agents[flow_name].status = MigrationStatus.DEPLOYED
-                    self.ir.agents[flow_name].resource_name = new_agent["name"]
+                    self.ir.agents[flow_name].resource_name = new_agent.name
                     self.reporter.log_agent(
                         flow_name,
-                        new_agent["name"],
+                        new_agent.name,
                         agent_payload["description"],
                         self.default_model,
                     )

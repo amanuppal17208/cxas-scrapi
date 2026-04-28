@@ -104,16 +104,11 @@ class CLIDashboard:
         """Prompt user to select resources to migrate."""
         self.console.print("\n[bold blue]=== Resource Selection ===[/]\n")
 
-        # Convert Pydantic model to dict if needed
-        if hasattr(agent_data, "model_dump"):
-            data_dict = agent_data.model_dump()
-        elif hasattr(agent_data, "dict"):
-            data_dict = agent_data.dict()
-        else:
-            data_dict = agent_data
+        # Use Pydantic model directly
+        data_dict = agent_data
 
-        playbooks = data_dict.get("playbooks", [])
-        flows = data_dict.get("flows", [])
+        playbooks = data_dict.playbooks
+        flows = data_dict.flows
 
         all_resources = []
         for pb in playbooks:
@@ -121,7 +116,7 @@ class CLIDashboard:
                 ("Playbook", pb.get("displayName", "Unnamed"), pb)
             )
         for flow in flows:
-            f = flow.get("flow_data", flow)
+            f = flow.flow_data
             all_resources.append(
                 ("Flow", f.get("displayName", "Unnamed"), flow)
             )
@@ -160,9 +155,9 @@ class CLIDashboard:
 
         if not answer:
             if is_include:
-                filtered_data = data_dict.copy()
-                filtered_data["playbooks"] = []
-                filtered_data["flows"] = []
+                filtered_data = data_dict.model_copy()
+                filtered_data.playbooks = []
+                filtered_data.flows = []
                 return filtered_data
             else:
                 return data_dict
@@ -189,9 +184,9 @@ class CLIDashboard:
                     elif res_type == "Flow":
                         selected_flows.append(data)
 
-            filtered_data = data_dict.copy()
-            filtered_data["playbooks"] = selected_playbooks
-            filtered_data["flows"] = selected_flows
+            filtered_data = data_dict.model_copy()
+            filtered_data.playbooks = selected_playbooks
+            filtered_data.flows = selected_flows
             return filtered_data
 
         except ValueError:
@@ -199,9 +194,9 @@ class CLIDashboard:
                 "[red]Invalid input. Proceeding with default selection.[/]"
             )
             if is_include:
-                filtered_data = data_dict.copy()
-                filtered_data["playbooks"] = []
-                filtered_data["flows"] = []
+                filtered_data = data_dict.model_copy()
+                filtered_data.playbooks = []
+                filtered_data.flows = []
                 return filtered_data
             else:
                 return data_dict
@@ -215,10 +210,10 @@ class CLIDashboard:
         analyzer = DependencyAnalyzer(full_data)
 
         selected_ids = []
-        for pb in filtered_data.get("playbooks", []):
+        for pb in filtered_data.playbooks:
             selected_ids.append(pb.get("name"))
-        for flow in filtered_data.get("flows", []):
-            f = flow.get("flow_data", flow)
+        for flow in filtered_data.flows:
+            f = flow.flow_data
             selected_ids.append(f.get("name"))
 
         outgoing, incoming = analyzer.get_impact(selected_ids)
@@ -356,10 +351,10 @@ class CLIDashboard:
             self.console.print("\n[bold blue]=== Review ===[/]\n")
             self.console.print(f"Target Agent: {config.target_name}")
             self.console.print(
-                f"Selected Playbooks: {len(filtered_data.get('playbooks', []))}"
+                f"Selected Playbooks: {len(filtered_data.playbooks)}"
             )
             self.console.print(
-                f"Selected Flows: {len(filtered_data.get('flows', []))}"
+                f"Selected Flows: {len(filtered_data.flows)}"
             )
 
             if Confirm.ask("Proceed to Migration?", default=True):

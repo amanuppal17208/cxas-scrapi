@@ -30,32 +30,30 @@ class HighLevelGraphVisualizer:
         self.name_to_uuid: Dict[str, str] = {}
         self.edges_accumulator: Dict[tuple, List[str]] = {}
 
-        for pb_wrap in self.data.get("playbooks", []):
-            pb = pb_wrap.get("playbook", pb_wrap)
+        for pb in self.data.playbooks:
             uid = self._get_raw_id(pb)
             name = pb.get("displayName", uid)
             if uid:
                 self.uuid_to_name[uid] = name
                 self.name_to_uuid[name] = uid
 
-        for flow_wrap in self.data.get("flows", []):
-            flow = flow_wrap.get("flow_data", flow_wrap)
-            uid = self._get_raw_id(flow)
-            name = flow.get("displayName", uid)
+        for flow in self.data.flows:
+            flow_data = flow.flow_data
+            uid = self._get_raw_id(flow_data)
+            name = flow_data.get("displayName", uid)
             if uid:
                 self.uuid_to_name[uid] = name
                 self.name_to_uuid[name] = uid
 
-        for tool_entry in self.data.get("tools", []):
+        for tool_entry in self.data.tools:
             uid = self._get_raw_id(tool_entry)
             name = tool_entry.get("displayName", uid)
             if uid:
                 self.uuid_to_name[uid] = name
 
-        for webhook_entry in self.data.get("webhooks", []):
-            webhook_data = webhook_entry.get("value", webhook_entry)
-            uid = self._get_raw_id(webhook_data)
-            name = webhook_data.get("displayName", uid)
+        for webhook_entry in self.data.webhooks:
+            uid = self._get_raw_id(webhook_entry)
+            name = webhook_entry.get("displayName", uid)
             if uid:
                 self.uuid_to_name[uid] = name
 
@@ -86,7 +84,7 @@ class HighLevelGraphVisualizer:
 
     def _get_intent_name(self, intent_ref: str) -> str:
         intent_id = str(intent_ref).split("/")[-1]
-        for intent in self.data.get("intents", []):
+        for intent in self.data.intents:
             if str(intent.get("name", "")).split("/")[-1] == intent_id:
                 return intent.get("displayName", intent_id)
         return intent_id
@@ -319,12 +317,9 @@ class HighLevelGraphVisualizer:
         self.edges_accumulator = {}
 
         # Identify entry point
-        agent_data = self.data.get("agent", {})
         entry_point = (
-            agent_data.get("startPlaybook")
-            or agent_data.get("startFlow")
-            or self.data.get("startPlaybook")
-            or self.data.get("startFlow")
+            self.data.start_playbook
+            or self.data.start_flow
         )
         entry_uuid = (
             self._resolve_to_uuid(entry_point)
@@ -346,8 +341,7 @@ class HighLevelGraphVisualizer:
         )
 
         # Playbooks
-        for pb_wrap in self.data.get("playbooks", []):
-            pb = pb_wrap.get("playbook", pb_wrap)
+        for pb in self.data.playbooks:
             pb_uuid = self._resolve_to_uuid(self._get_raw_id(pb))
             name = self.uuid_to_name.get(pb_uuid, pb_uuid)
 
@@ -397,9 +391,9 @@ class HighLevelGraphVisualizer:
             )
 
         # Flows
-        for flow_wrap in self.data.get("flows", []):
-            flow = flow_wrap.get("flow_data", flow_wrap)
-            flow_uuid = self._resolve_to_uuid(self._get_raw_id(flow))
+        for flow in self.data.flows:
+            flow_data = flow.flow_data
+            flow_uuid = self._resolve_to_uuid(self._get_raw_id(flow_data))
             name = self.uuid_to_name.get(flow_uuid, flow_uuid)
 
             pen_width = "3" if flow_uuid == entry_uuid else "2"
@@ -414,20 +408,20 @@ class HighLevelGraphVisualizer:
             )
 
             all_items = (
-                flow.get("transitionRoutes", [])
-                + flow.get("transitionEvents", [])
-                + flow.get("eventHandlers", [])
-                + flow.get("conversationEvents", [])
+                flow.flow_data.get("transitionRoutes", [])
+                + flow.flow_data.get("transitionEvents", [])
+                + flow.flow_data.get("eventHandlers", [])
+                + flow.flow_data.get("conversationEvents", [])
             )
             self._extract_flow_routes_and_tools(all_items, flow_uuid)
 
-            for page_wrap in flow_wrap.get("pages", []):
-                page = page_wrap.get("value", page_wrap)
+            for page in flow.pages:
+                page_data = page.page_data
                 page_items = (
-                    page.get("transitionRoutes", [])
-                    + page.get("transitionEvents", [])
-                    + page.get("eventHandlers", [])
-                    + page.get("conversationEvents", [])
+                    page_data.get("transitionRoutes", [])
+                    + page_data.get("transitionEvents", [])
+                    + page_data.get("eventHandlers", [])
+                    + page_data.get("conversationEvents", [])
                 )
                 self._extract_flow_routes_and_tools(page_items, flow_uuid)
 

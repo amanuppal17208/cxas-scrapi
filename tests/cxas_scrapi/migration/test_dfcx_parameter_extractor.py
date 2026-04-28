@@ -15,6 +15,7 @@
 import re
 from unittest.mock import MagicMock
 
+from cxas_scrapi.migration.data_models import DFCXAgentIR
 from cxas_scrapi.migration.dfcx_parameter_extractor import (
     DFCXParameterExtractor,
 )
@@ -105,6 +106,9 @@ def test_deep_scan_for_variables():
 
 def test_migrate_parameters():
     source_agent_data = {
+        "name": "projects/p1/locations/l1/agents/a1",
+        "display_name": "Test Agent",
+        "default_language_code": "en",
         "playbooks": [
             {
                 "displayName": "Playbook1",
@@ -118,9 +122,15 @@ def test_migrate_parameters():
         ],
         "flows": [
             {
+                "flow_id": "projects/p1/locations/l1/agents/a1/flows/f1",
+                "flow_data": {
+                    "name": "projects/p1/locations/l1/agents/a1/flows/f1",
+                    "displayName": "Flow1",
+                },
                 "pages": [
                     {
-                        "value": {
+                        "page_id": "projects/p1/locations/l1/agents/a1/flows/f1/pages/p1",
+                        "page_data": {
                             "displayName": "Page1",
                             "form": {
                                 "parameters": [
@@ -130,9 +140,9 @@ def test_migrate_parameters():
                                     }
                                 ]
                             },
-                        }
+                        },
                     }
-                ]
+                ],
             }
         ],
     }
@@ -140,7 +150,7 @@ def test_migrate_parameters():
 
     final_declarations, parameter_name_map = (
         DFCXParameterExtractor.migrate_parameters(
-            source_agent_data, mock_reporter
+            DFCXAgentIR(**source_agent_data), mock_reporter
         )
     )
 

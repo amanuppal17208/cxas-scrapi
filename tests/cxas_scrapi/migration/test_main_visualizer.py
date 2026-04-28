@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, patch
 from rich.console import Console
 from rich.tree import Tree
 
+from cxas_scrapi.migration.data_models import DFCXAgentIR
 from cxas_scrapi.migration.main_visualizer import MainVisualizer
 
 # ---------------------------------------------------------------------------
@@ -30,51 +31,52 @@ PB_UUID = "pb-uuid-1"
 FLOW_UUID = "flow-uuid-1"
 
 DATA_WITH_TOOLS = {
+    "name": "projects/p/locations/l/agents/a",
+    "display_name": "Agent with Tools",
+    "default_language_code": "en",
     "agent": {},
     "playbooks": [],
     "flows": [],
     "tools": [
         {
-            "tool": {
-                "displayName": "SearchTool",
-                "description": "Searches the web.",
-                "openApiSpec": {"textSchema": "openapi: 3.0\n"},
-            }
+            "displayName": "SearchTool",
+            "description": "Searches the web.",
+            "openApiSpec": {"textSchema": "openapi: 3.0\n"},
         }
     ],
     "webhooks": [
         {
-            "value": {
-                "displayName": "AuthWebhook",
-                "genericWebService": {
-                    "uri": "https://auth.example.com",
-                    "webhookType": "STANDARD",
-                    "httpMethod": "POST",
-                },
-            }
+            "displayName": "AuthWebhook",
+            "genericWebService": {
+                "uri": "https://auth.example.com",
+                "webhookType": "STANDARD",
+                "httpMethod": "POST",
+            },
         }
     ],
     "intents": [],
 }
 
 DATA_WITH_PLAYBOOK_AND_FLOW = {
+    "name": "projects/p/locations/l/agents/a",
+    "display_name": "Agent with PB and Flow",
+    "default_language_code": "en",
     "agent": {"startPlaybook": f"projects/p/l/a/playbooks/{PB_UUID}"},
     "playbooks": [
         {
-            "playbook": {
-                "name": f"projects/p/l/a/playbooks/{PB_UUID}",
-                "displayName": "Root PB",
-                "goal": "Handle everything",
-                "playbookRoutes": [],
-                "flowRoutes": [],
-                "referencedTools": [],
-                "instruction": {"steps": [{"text": "Do the thing."}]},
-            }
+            "name": f"projects/p/l/a/playbooks/{PB_UUID}",
+            "displayName": "Root PB",
+            "goal": "Handle everything",
+            "playbookRoutes": [],
+            "flowRoutes": [],
+            "referencedTools": [],
+            "instruction": {"steps": [{"text": "Do the thing."}]},
         }
     ],
     "flows": [
         {
-            "flow": {
+            "flow_id": f"projects/p/l/a/flows/{FLOW_UUID}",
+            "flow_data": {
                 "name": f"projects/p/l/a/flows/{FLOW_UUID}",
                 "displayName": "Sub Flow",
                 "transitionRoutes": [],
@@ -89,6 +91,9 @@ DATA_WITH_PLAYBOOK_AND_FLOW = {
 }
 
 EMPTY_DATA = {
+    "name": "projects/p/locations/l/agents/a",
+    "display_name": "Empty Agent",
+    "default_language_code": "en",
     "agent": {},
     "playbooks": [],
     "flows": [],
@@ -118,33 +123,33 @@ def _make_mock_dot():
 
 class TestMainVisualizerToolsTree:
     def test_tools_tree_is_tree_instance(self):
-        mv = MainVisualizer(DATA_WITH_TOOLS)
+        mv = MainVisualizer(DFCXAgentIR(**DATA_WITH_TOOLS))
         tree = mv._build_tools_tree()
         assert isinstance(tree, Tree)
 
     def test_tool_name_in_tree(self):
-        mv = MainVisualizer(DATA_WITH_TOOLS)
+        mv = MainVisualizer(DFCXAgentIR(**DATA_WITH_TOOLS))
         c = Console(force_terminal=False, width=200, record=True)
         c.print(mv._build_tools_tree())
         rendered = c.export_text()
         assert "SearchTool" in rendered
 
     def test_webhook_name_in_tree(self):
-        mv = MainVisualizer(DATA_WITH_TOOLS)
+        mv = MainVisualizer(DFCXAgentIR(**DATA_WITH_TOOLS))
         c = Console(force_terminal=False, width=200, record=True)
         c.print(mv._build_tools_tree())
         rendered = c.export_text()
         assert "AuthWebhook" in rendered
 
     def test_webhook_uri_in_tree(self):
-        mv = MainVisualizer(DATA_WITH_TOOLS)
+        mv = MainVisualizer(DFCXAgentIR(**DATA_WITH_TOOLS))
         c = Console(force_terminal=False, width=200, record=True)
         c.print(mv._build_tools_tree())
         rendered = c.export_text()
         assert "auth.example.com" in rendered
 
     def test_no_tools_message_when_empty(self):
-        mv = MainVisualizer(EMPTY_DATA)
+        mv = MainVisualizer(DFCXAgentIR(**EMPTY_DATA))
         c = Console(force_terminal=False, width=200, record=True)
         c.print(mv._build_tools_tree())
         rendered = c.export_text()
@@ -158,7 +163,7 @@ class TestMainVisualizerTopology:
     )
     def test_visualize_topology_calls_display(self, mock_build, mock_display):
         mock_build.return_value = _make_mock_dot()
-        mv = MainVisualizer(EMPTY_DATA)
+        mv = MainVisualizer(DFCXAgentIR(**EMPTY_DATA))
         mv.visualize_topology()
         assert mock_display.called
 
@@ -173,7 +178,7 @@ class TestMainVisualizerTopology:
         mock_dot = MagicMock()
         mock_dot.pipe.side_effect = Exception("graphviz binary not found")
         mock_build.return_value = mock_dot
-        mv = MainVisualizer(EMPTY_DATA)
+        mv = MainVisualizer(DFCXAgentIR(**EMPTY_DATA))
         mv.visualize_topology()
         # display() should still be called (fallback branch)
         assert mock_display.called
@@ -182,18 +187,18 @@ class TestMainVisualizerTopology:
 class TestMainVisualizerDetails:
     @patch("cxas_scrapi.migration.main_visualizer.display")
     def test_visualize_details_no_error_with_empty_data(self, mock_display):
-        mv = MainVisualizer(EMPTY_DATA)
+        mv = MainVisualizer(DFCXAgentIR(**EMPTY_DATA))
         mv.visualize_details()
 
     @patch("cxas_scrapi.migration.main_visualizer.display")
     def test_visualize_details_renders_playbook(self, mock_display):
-        mv = MainVisualizer(DATA_WITH_PLAYBOOK_AND_FLOW)
+        mv = MainVisualizer(DFCXAgentIR(**DATA_WITH_PLAYBOOK_AND_FLOW))
         mv.visualize_details()
         # Console output captured internally; just ensure no exception
 
     @patch("cxas_scrapi.migration.main_visualizer.display")
     def test_visualize_details_renders_flow(self, mock_display):
-        mv = MainVisualizer(DATA_WITH_PLAYBOOK_AND_FLOW)
+        mv = MainVisualizer(DFCXAgentIR(**DATA_WITH_PLAYBOOK_AND_FLOW))
         mv.visualize_details()
 
 
@@ -208,7 +213,7 @@ class TestMainVisualizerExport:
         mock_build.return_value = mock_dot
 
         prefix = str(tmp_path / "test_agent")
-        mv = MainVisualizer(EMPTY_DATA)
+        mv = MainVisualizer(DFCXAgentIR(**EMPTY_DATA))
         mv.export_visualizations(prefix=prefix)
 
         md_file = f"{prefix}_detailed_resources.md"
@@ -225,7 +230,7 @@ class TestMainVisualizerExport:
         mock_build.return_value = mock_dot
 
         prefix = str(tmp_path / "test_agent")
-        mv = MainVisualizer(EMPTY_DATA)
+        mv = MainVisualizer(DFCXAgentIR(**EMPTY_DATA))
         mv.export_visualizations(prefix=prefix)
 
         mock_dot.render.assert_called_once()
@@ -241,7 +246,7 @@ class TestMainVisualizerExport:
         mock_build.return_value = mock_dot
 
         prefix = str(tmp_path / "test_agent")
-        mv = MainVisualizer(DATA_WITH_TOOLS)
+        mv = MainVisualizer(DFCXAgentIR(**DATA_WITH_TOOLS))
         mv.export_visualizations(prefix=prefix)
 
         md_file = f"{prefix}_detailed_resources.md"
