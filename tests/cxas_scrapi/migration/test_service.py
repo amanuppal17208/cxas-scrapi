@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from cxas_scrapi.migration.data_models import MigrationConfig
+from cxas_scrapi.migration.data_models import DFCXAgentIR, MigrationConfig
 from cxas_scrapi.migration.service import MigrationService
 
 
@@ -42,11 +42,13 @@ async def test_run_migration_success():
 
     # Mock internal components
     service.exporter = MagicMock()
-    service.exporter.fetch_full_agent_details.return_value = {
-        "displayName": "Test Agent",
-        "playbooks": [],
-        "flows": [],
-    }
+    service.exporter.fetch_full_agent_details.return_value = DFCXAgentIR(
+        name="projects/p/locations/l/agents/a",
+        display_name="Test Agent",
+        default_language_code="en",
+        playbooks=[],
+        flows=[],
+    )
 
     service.ai_augment = MagicMock()
     service.ai_augment.generate_agent_description = AsyncMock(

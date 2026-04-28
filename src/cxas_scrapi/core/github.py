@@ -66,6 +66,11 @@ jobs:
 
 {setup_gcloud_step}
 
+      - name: Download cxas-scrapi CLI Wheel
+        run: |
+          gsutil cp gs://cxas-scrapi-github/cxas_scrapi-0.1.3-py3-none-any.whl \
+            {github_context_path}/
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -90,9 +95,9 @@ jobs:
 {docker_auth_args}
             agent-image \\
             ci-test --app-dir {github_context_path} \\
-                      --project-id ${{{{ env.PROJECT_ID }}}} \\
+                      --project_id ${{{{ env.PROJECT_ID }}}} \\
                       --location ${{{{ env.LOCATION }}}} \\
-                      --display-name "$D"
+                      --display_name "$D"
 
 """
 
@@ -149,12 +154,16 @@ jobs:
           python -m pip install --upgrade pip
           wget https://storage.googleapis.com/gassets-api-ai/ces-client-libraries/v1beta/ces-v1beta-py.tar
           pip install ces-v1beta-py.tar --quiet
-          pip install cxas-scrapi
+          gsutil cp gs://cxas-scrapi-github/cxas_scrapi-0.1.3-py3-none-any.whl .
+          pip install cxas_scrapi-0.1.3-py3-none-any.whl
 
       - name: Deploy to CX Agent Studio
         run: |
           cxas push --app-dir {github_context_path} \\
-                         --to ${{{{ env.APP_ID }}}}
+                         --project_id ${{{{ env.PROJECT_ID }}}} \\
+                         --location ${{{{ env.LOCATION }}}} \\
+                         --app_id ${{{{ env.APP_ID }}}} \\
+                         --display_name "${{{{ env.DISPLAY_NAME }}}}"
 """
 
 GITHUB_ACTION_TEMPLATE_CLEANUP = """name: "Cleanup {agent_name}"
@@ -201,13 +210,14 @@ jobs:
           python -m pip install --upgrade pip
           wget https://storage.googleapis.com/gassets-api-ai/ces-client-libraries/v1beta/ces-v1beta-py.tar
           pip install ces-v1beta-py.tar --quiet
-          pip install cxas-scrapi
+          gsutil cp gs://cxas-scrapi-github/cxas_scrapi-0.1.3-py3-none-any.whl .
+          pip install cxas_scrapi-0.1.3-py3-none-any.whl
 
       - name: Run Cleanup
         run: |
           D="[CI] PR-${{{{ github.event.pull_request.number }}}} {agent_name}"
-          cxas delete --display-name "$D" \\
-                   --project-id ${{{{ env.PROJECT_ID }}}} \\
+          cxas delete --display_name "$D" \\
+                   --project_id ${{{{ env.PROJECT_ID }}}} \\
                    --location ${{{{ env.LOCATION }}}}
 """
 
@@ -229,12 +239,15 @@ RUN URL="https://storage.googleapis.com/gassets-api-ai/" && \\
     pip install ces-v1beta-py.tar --quiet && \\
     rm ces-v1beta-py.tar
 
+# Copy the CLI wheel downloaded by GitHub Actions into the container
+COPY cxas_scrapi-*.whl /dist/
+
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
 # Install dependencies and local CLI wheel
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install cxas-scrapi
+    pip install /dist/cxas_scrapi-*.whl
 
 # Copy the agent code into the container
 COPY . .
@@ -540,7 +553,7 @@ def init_github_action(args: argparse.Namespace) -> None:
             if project_id == "YOUR_PROJECT_ID":
                 print(
                     "Warning: Cannot setup WIF with placeholder Project ID. "
-                    "Please provide --project-id."
+                    "Please provide --project_id."
                 )
             else:
                 pool_name = getattr(
@@ -737,6 +750,10 @@ if [ -z "$ADC_FILE_HOST" ]; then
   exit 1
 fi
 
+echo "Downloading cxas-scrapi CLI Wheel..."
+gsutil cp gs://cxas-scrapi-github/cxas_scrapi-*.whl \
+  "$(dirname "$0")/$AGENT_DIR/"
+
 echo "Building Docker Image..."
 docker build -t agent-image "$(dirname "$0")/$AGENT_DIR"
 
@@ -752,9 +769,9 @@ docker run --rm \
   -v "$ADC_FILE_HOST":/workspace/application_default_credentials.json \
   agent-image \
   ci-test --app-dir "$AGENT_DIR" \
-            --project-id "$PROJECT_ID" \
+            --project_id "$PROJECT_ID" \
             --location "$LOCATION" \
-            --display-name "[Local] $(basename "$AGENT_DIR")"
+            --display_name "[Local] $(basename "$AGENT_DIR")"
 """
     with open(script_path, "w") as f:
         f.write(script_content)
@@ -769,8 +786,9 @@ docker run --rm \
 
             hook_content = f"""#!/bin/sh
 # CXAS SCRAPI Auto-generated Hook
-echo "Running linter before push..."
-cxas lint --app-dir "{agent_dir}"
+echo "Running local tests before push..."
+cxas local-test --app-dir "{agent_dir}" \
+  --project_id "{project_id}" --location "{location}"
 """
             with open(hook_path, "w") as f:
                 f.write(hook_content)

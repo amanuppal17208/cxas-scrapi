@@ -73,6 +73,7 @@ class DFCXAgentIR(BaseModel):
     agent_transition_route_groups: List[Dict[str, Any]] = Field(
         default_factory=list
     )
+    code_blocks: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # --- Target Migration IR Models ---
@@ -145,4 +146,4 @@ class MigrationConfig(BaseModel):
     eval_runner_target: str = "Custom API Runner"
     migration_version: str = "2.0"
     optimize_for_cxas: bool = False
-    source_agent_data_override: Optional[Dict[str, Any]] = None
+    source_agent_data_override: Optional[DFCXAgentIR] = None

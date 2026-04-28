@@ -16,12 +16,16 @@
 
 import pytest
 
+from cxas_scrapi.migration.data_models import DFCXAgentIR
 from cxas_scrapi.migration.dfcx_dep_analyzer import DependencyAnalyzer
 
 
 @pytest.fixture
 def sample_agent_data():
-    return {
+    return DFCXAgentIR(**{
+        "name": "projects/p1/locations/l1/agents/a1",
+        "display_name": "Sample Agent",
+        "default_language_code": "en",
         "playbooks": [
             {
                 "name": "projects/p1/locations/l1/agents/a1/playbooks/pb1",
@@ -38,6 +42,7 @@ def sample_agent_data():
         ],
         "flows": [
             {
+                "flow_id": "projects/p1/locations/l1/agents/a1/flows/f1",
                 "flow_data": {
                     "name": "projects/p1/locations/l1/agents/a1/flows/f1",
                     "displayName": "Flow 1",
@@ -48,16 +53,17 @@ def sample_agent_data():
                             )
                         }
                     ],
-                }
+                },
             },
             {
+                "flow_id": "projects1/locations/l1/agents/a1/flows/f2",
                 "flow_data": {
                     "name": "projects/p1/locations/l1/agents/a1/flows/f2",
                     "displayName": "Flow 2",
-                }
+                },
             },
         ],
-    }
+    })
 
 
 def test_analyzer_init(sample_agent_data):
