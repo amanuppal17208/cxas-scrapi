@@ -128,7 +128,8 @@ def app_push(args: argparse.Namespace) -> Optional[str]:  # noqa: C901
     identifier = target_app or app_name_arg
 
     if identifier:
-        apps_client, app_name, display_name = _resolve_app_args(identifier, args)
+        apps_client, app_name, display_name = _resolve_app_args(
+            identifier, args)
         print("Pushing to existing app... Overwriting if supported.")
     else:
         apps_client = Apps(project_id=args.project_id, location=args.location)
