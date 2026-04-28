@@ -124,7 +124,7 @@ def app_push(args: argparse.Namespace) -> Optional[str]:  # noqa: C901
     print(f"Pushing app from {app_dir}...")
 
     target_app = getattr(args, "to", None)
-    app_id_arg = getattr(args, "app_id", None)
+    app_id_arg = getattr(args, "app_name", None)
     identifier = target_app or app_id_arg
 
     if identifier:
@@ -139,8 +139,8 @@ def app_push(args: argparse.Namespace) -> Optional[str]:  # noqa: C901
     _app_push(
         app_dir=app_dir,
         apps_client=apps_client,
-        target_app_id=getattr(args, "app_id", None) or app_id,
-        identifier=getattr(args, "to", None) or getattr(args, "app_id", None),
+        target_app_name=getattr(args, "app_name", None) or app_id,
+        identifier=getattr(args, "to", None) or getattr(args, "app_name", None),
         display_name=getattr(args, "display_name", None) or display_name,
         env_file=getattr(args, "env_file", None),
     )
@@ -149,7 +149,7 @@ def app_push(args: argparse.Namespace) -> Optional[str]:  # noqa: C901
 def _app_push(
     app_dir: str,
     apps_client: Apps = None,
-    target_app_id: str = None,
+    target_app_name: str = None,
     identifier: str = None,
     display_name: str = None,
     env_file: str = None,
@@ -212,10 +212,7 @@ def _app_push(
         # provided display_name.
         print("Uploading to CES...")
 
-        if target_app_id:
-            # Extract UUID if full resource name provided.
-            if "apps/" in target_app_id:
-                target_app_id = target_app_id.rsplit("apps/", maxsplit=1)[-1]
+        if target_app_name:
             result = apps_client.import_app(
                 app_name=target_app_name, app_content=app_content
             )
@@ -305,13 +302,13 @@ def app_branch(args: argparse.Namespace) -> None:
     print(f"Branching from {args.source} to {args.new_name}")
     # Composite operation: pull existing, create new, push content.
 
-    apps_client, app_id, _ = _resolve_app_args(args.source, args)
+    apps_client, app_name, _ = _resolve_app_args(args.source, args)
     env_file = getattr(args, "env_file", None)
 
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
             print("Pulling source app...")
-            _app_pull(apps_client, app_id, temp_dir)
+            _app_pull(apps_client, app_name, temp_dir)
 
             extracted_dirs = [
                 d
