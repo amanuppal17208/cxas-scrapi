@@ -321,7 +321,8 @@ class DFCXAgentExporter(BaseDFCXClient):
 
                     path_parts = rel_path.split("/")
 
-                    # Flat resources: webhooks, agentTransitionRouteGroups, codeBlocks
+                    # Flat resources: webhooks, agentTransitionRouteGroups,
+                    # codeBlocks
                     if len(path_parts) == 2 and path_parts[0] in [
                         "webhooks",
                         "agentTransitionRouteGroups",

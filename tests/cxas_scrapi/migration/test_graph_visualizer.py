@@ -131,7 +131,9 @@ class TestHighLevelGraphVisualizer:
         assert "ENTRY_MARKER" in src
 
     def test_playbook_node_in_source(self):
-        dot = HighLevelGraphVisualizer(DFCXAgentIR(**DATA_WITH_PLAYBOOK)).build()
+        dot = HighLevelGraphVisualizer(
+            DFCXAgentIR(**DATA_WITH_PLAYBOOK)
+        ).build()
         assert "Welcome Playbook" in dot.source
 
     def test_flow_node_in_source(self):
@@ -144,14 +146,18 @@ class TestHighLevelGraphVisualizer:
             assert "ENTRY POINT" in dot.source
 
     def test_entry_point_edge_connects_to_start_node(self):
-        dot = HighLevelGraphVisualizer(DFCXAgentIR(**DATA_WITH_PLAYBOOK)).build()
+        dot = HighLevelGraphVisualizer(
+            DFCXAgentIR(**DATA_WITH_PLAYBOOK)
+        ).build()
         src = dot.source
         # The ENTRY_MARKER must have an edge to the playbook uuid
         assert "ENTRY_MARKER" in src
         assert PB_UUID in src
 
     def test_flow_route_creates_edge(self):
-        dot = HighLevelGraphVisualizer(DFCXAgentIR(**DATA_WITH_PLAYBOOK_TO_FLOW)).build()
+        dot = HighLevelGraphVisualizer(
+            DFCXAgentIR(**DATA_WITH_PLAYBOOK_TO_FLOW)
+        ).build()
         src = dot.source
         # Both nodes must appear
         assert PB_UUID in src

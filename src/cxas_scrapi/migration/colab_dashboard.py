@@ -14,13 +14,16 @@
 
 import asyncio
 import copy
+import io
 import json
 import logging
 import os
 import re
 import time
+import traceback
 from datetime import datetime
 
+import google.auth
 import ipywidgets as widgets
 from IPython.display import clear_output, display
 
@@ -48,7 +51,6 @@ class MigrationConfigurator:
         default_project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
         if not default_project:
             try:
-                import google.auth
                 _, default_project = google.auth.default()
             except Exception:
                 default_project = ""
@@ -736,8 +738,11 @@ def render_migration_dashboard(cx_api, migration_service):
                 )
 
                 filtered_data = selector_ui.get_selected_data()
-                print(f">>> Data loaded: {filtered_data.display_name if filtered_data else 'None'}")
-                
+                display_name = (
+                    filtered_data.display_name if filtered_data else "None"
+                )
+                print(f">>> Data loaded: {display_name}")
+
                 print(">>> DEBUG: Before check if not filtered_data")
                 if not filtered_data:
                     print(
@@ -764,16 +769,21 @@ def render_migration_dashboard(cx_api, migration_service):
                 async def _run():
                     with output_log:
                         print(">>> DEBUG: _run entered")
-                        output_log.append_stdout(">>> Background task _run started\n")
+                        output_log.append_stdout(
+                            ">>> Background task _run started\n"
+                        )
                         try:
                             await migration_service.run_migration(
-                                source_cx_agent_id=agent_id_input.value or "uploaded-agent",
+                                source_cx_agent_id=(
+                                    agent_id_input.value or "uploaded-agent"
+                                ),
                                 config=config,
                             )
                         except Exception as e:
-                            output_log.append_stderr(f"❌ Migration failed inside _run: {e}\n")
-                            import traceback
-                            import io
+                            output_log.append_stderr(
+                                f"❌ Migration failed inside _run: {e}\n"
+                            )
+
                             buf = io.StringIO()
                             traceback.print_exc(file=buf)
                             output_log.append_stderr(buf.getvalue())
@@ -785,8 +795,7 @@ def render_migration_dashboard(cx_api, migration_service):
                 asyncio.create_task(_run())
             except Exception as e:
                 output_log.append_stderr(f"❌ Error in on_migrate_click: {e}\n")
-                import traceback
-                import io
+
                 buf = io.StringIO()
                 traceback.print_exc(file=buf)
                 output_log.append_stderr(buf.getvalue())

@@ -21,6 +21,9 @@ from typing import Any, Dict
 
 from rich.console import Console
 
+from cxas_scrapi.core.agents import Agents
+from cxas_scrapi.core.apps import Apps
+from cxas_scrapi.core.tools import Tools
 from cxas_scrapi.migration.ai_augment import AIAugment
 from cxas_scrapi.migration.artifacts_builder import CXASAsyncArtifactBuilder
 from cxas_scrapi.migration.code_block_migrator import CodeBlockMigrator
@@ -47,6 +50,7 @@ from cxas_scrapi.migration.flow_visualizer import (
     FlowTreeVisualizer,
 )
 from cxas_scrapi.utils.gemini import GeminiGenerate
+from cxas_scrapi.utils.secret_manager_utils import SecretManagerUtils
 
 logger = logging.getLogger(__name__)
 
@@ -74,15 +78,15 @@ class MigrationService:
         self.default_model = default_model
 
         if ps_apps_client is None:
-            from cxas_scrapi.core.apps import Apps
-            self.ps_apps = Apps(project_id=self.project_id, location=self.location)
+            self.ps_apps = Apps(
+                project_id=self.project_id, location=self.location
+            )
         else:
             self.ps_apps = ps_apps_client
         self.ps_agents = ps_agents_client
         self.ps_tools = ps_tools_client
         self.ps_toolsets = ps_toolsets_client
         if secret_manager_client is None:
-            from cxas_scrapi.utils.secret_manager_utils import SecretManagerUtils
             self.secret_manager = SecretManagerUtils(project_id=self.project_id)
         else:
             self.secret_manager = secret_manager_client
@@ -348,11 +352,9 @@ class MigrationService:
             self.deployment_state["app_created"] = True
             logger.info(f"   -> App Created: {full_app_name}")
             if self.ps_agents is None:
-                from cxas_scrapi.core.agents import Agents
                 self.ps_agents = Agents(app_name=full_app_name)
                 self.topology_linker.ps_agents = self.ps_agents
             if self.ps_tools is None:
-                from cxas_scrapi.core.tools import Tools
                 self.ps_tools = Tools(app_name=full_app_name)
                 self.code_block_migrator.ps_tools = self.ps_tools
 
@@ -610,7 +612,8 @@ class MigrationService:
                 if new_ps_agent and hasattr(new_ps_agent, "name"):
                     logger.info("    -> Success!")
                     agent.status = MigrationStatus.DEPLOYED
-                    agent.resource_name = new_ps_agent.name  # Save deployed API name for linking
+                    # Save deployed API name for linking
+                    agent.resource_name = new_ps_agent.name
                     self.reporter.log_agent(
                         display_name,
                         new_ps_agent.name,

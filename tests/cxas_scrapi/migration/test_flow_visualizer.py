@@ -17,7 +17,10 @@
 from rich.console import Console
 from rich.tree import Tree
 
-from cxas_scrapi.migration.data_models import DFCXAgentIR, DFCXFlowModel, DFCXPageModel
+from cxas_scrapi.migration.data_models import (
+    DFCXAgentIR,
+    DFCXFlowModel,
+)
 from cxas_scrapi.migration.flow_visualizer import (
     FlowDependencyResolver,
     FlowTreeVisualizer,
@@ -152,15 +155,21 @@ LOGIC_FLOW_WRAPPER = {
 
 class TestFlowDependencyResolver:
     def setup_method(self):
-        self.resolver = FlowDependencyResolver(DFCXAgentIR(**MINIMAL_AGENT_DATA))
+        self.resolver = FlowDependencyResolver(
+            DFCXAgentIR(**MINIMAL_AGENT_DATA)
+        )
 
     def test_collects_intent_from_transition_route(self):
-        result = self.resolver.resolve(DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK))
+        result = self.resolver.resolve(
+            DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        )
         intent_names = [i.get("displayName") for i in result["intents"]]
         assert "confirm.yes" in intent_names
 
     def test_collects_webhook_from_fulfillment(self):
-        result = self.resolver.resolve(DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK))
+        result = self.resolver.resolve(
+            DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        )
         wh_names = [w.get("displayName") for w in result["webhooks"]]
         assert "MyWebhook" in wh_names
 
@@ -169,16 +178,22 @@ class TestFlowDependencyResolver:
         assert result["flow_type"] == 1
 
     def test_flow_type_2_for_conversational_flow(self):
-        result = self.resolver.resolve(DFCXFlowModel(**CONVERSATIONAL_FLOW_WRAPPER))
+        result = self.resolver.resolve(
+            DFCXFlowModel(**CONVERSATIONAL_FLOW_WRAPPER)
+        )
         assert result["flow_type"] == 2
 
     def test_pages_preserved_in_result(self):
-        result = self.resolver.resolve(DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK))
+        result = self.resolver.resolve(
+            DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        )
         assert len(result["pages"]) == 1
         assert PAGE_UUID in result["pages"][0].page_id
 
     def test_name_map_contains_flow(self):
-        result = self.resolver.resolve(DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK))
+        result = self.resolver.resolve(
+            DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        )
         assert FLOW_UUID in result["name_map"]
         assert result["name_map"][FLOW_UUID] == "Main Flow"
 
@@ -381,6 +396,8 @@ class TestFlowTreeVisualizer:
             },
             "pages": [],
         }
-        ctx = FlowDependencyResolver(DFCXAgentIR(**MINIMAL_AGENT_DATA)).resolve(DFCXFlowModel(**empty_flow))
+        ctx = FlowDependencyResolver(
+            DFCXAgentIR(**MINIMAL_AGENT_DATA)
+        ).resolve(DFCXFlowModel(**empty_flow))
         tree = FlowTreeVisualizer(ctx).build_tree()
         assert isinstance(tree, Tree)

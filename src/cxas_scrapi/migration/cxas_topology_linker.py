@@ -16,7 +16,11 @@ import logging
 import re
 from typing import Any, Dict, Set
 
-from cxas_scrapi.migration.data_models import DFCXAgentIR, MigrationIR, MigrationStatus
+from cxas_scrapi.migration.data_models import (
+    DFCXAgentIR,
+    MigrationIR,
+    MigrationStatus,
+)
 
 logger = logging.getLogger(__name__)
 
