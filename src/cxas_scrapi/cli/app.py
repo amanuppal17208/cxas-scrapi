@@ -124,22 +124,22 @@ def app_push(args: argparse.Namespace) -> Optional[str]:  # noqa: C901
     print(f"Pushing app from {app_dir}...")
 
     target_app = getattr(args, "to", None)
-    app_id_arg = getattr(args, "app_name", None)
-    identifier = target_app or app_id_arg
+    app_name_arg = getattr(args, "app_name", None)
+    identifier = target_app or app_name_arg
 
     if identifier:
-        apps_client, app_id, display_name = _resolve_app_args(identifier, args)
+        apps_client, app_name, display_name = _resolve_app_args(identifier, args)
         print("Pushing to existing app... Overwriting if supported.")
     else:
         apps_client = Apps(project_id=args.project_id, location=args.location)
-        app_id = None
+        app_name = None
         print("No target specified, using existing name if needed.")
         display_name = getattr(args, "display_name", None) or "Pushed Agent"
 
     _app_push(
         app_dir=app_dir,
         apps_client=apps_client,
-        target_app_name=getattr(args, "app_name", None) or app_id,
+        target_app_name=getattr(args, "app_name", None) or app_name,
         identifier=getattr(args, "to", None) or getattr(args, "app_name", None),
         display_name=getattr(args, "display_name", None) or display_name,
         env_file=getattr(args, "env_file", None),
@@ -238,7 +238,7 @@ def app_create(args: argparse.Namespace) -> None:
     apps_client = Apps(project_id=args.project_id, location=args.location)
     try:
         app = apps_client.create_app(
-            app_id=getattr(args, "app_name", None),
+            app_id=getattr(args, "app_id", None),
             display_name=args.name,
             description=args.description,
         )
