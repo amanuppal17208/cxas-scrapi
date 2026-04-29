@@ -14,10 +14,10 @@
     </h3>
     <h3 align="center">
       Important Links:
-      <a href="docs/">Docs</a>,
+      <a href="https://googlecloudplatform.github.io/cxas-scrapi/stable/">Docs</a>,
       <a href="examples/">Examples</a>,
-      <a href="docs/guides/skills/">Agent Skills</a>,
-      <a href="src/cxas_scrapi/core/">Core SDK</a>
+      <a href="https://googlecloudplatform.github.io/cxas-scrapi/stable/guides/skills/">Agent Skills</a>,
+      <a href="https://googlecloudplatform.github.io/cxas-scrapi/stable/api/">Core SDK</a>
     </h3>
 </html>
 
@@ -156,7 +156,9 @@ The `src/cxas_scrapi/migration` directory contains tools to facilitate transitio
 <!-- DOCUMENTATION -->
 # Documentation
 
-The full documentation site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/). To run it locally:
+The official documentation is hosted online at [https://googlecloudplatform.github.io/cxas-scrapi/stable/](https://googlecloudplatform.github.io/cxas-scrapi/stable/).
+
+The documentation site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/). To run it locally:
 
 ```sh
 # Install docs dependencies (inside your virtualenv)
