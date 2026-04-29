@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 
 from cxas_scrapi.migration.cxas_topology_linker import CXASTopologyLinker
 from cxas_scrapi.migration.data_models import (
+    DFCXAgentIR,
     IRAgent,
     IRMetadata,
     MigrationIR,
@@ -53,13 +54,16 @@ def test_link_and_finalize_topology():
     )
 
     source_agent_data = {
-        "startPlaybook": "projects/123/playbooks/agent1",
+        "name": "projects/123/apps/456",
+        "display_name": "Test Agent",
+        "default_language_code": "en",
+        "start_playbook": "projects/123/playbooks/agent1",
         "playbooks": [
             {"name": "projects/123/playbooks/agent1", "displayName": "Agent1"}
         ],
     }
 
-    linker.link_and_finalize_topology(ir, source_agent_data)
+    linker.link_and_finalize_topology(ir, DFCXAgentIR(**source_agent_data))
 
     # Verify that update_agent was called for Agent1 to link Agent2
     mock_ps_agents.update_agent.assert_called_once_with(

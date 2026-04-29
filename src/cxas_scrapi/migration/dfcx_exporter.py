@@ -75,6 +75,7 @@ class _ResourceProcessingContext:
     flow_map: Dict[str, Any] = field(default_factory=dict)
     generator_map: Dict[str, Any] = field(default_factory=dict)
     agent_trg_map: Dict[str, Any] = field(default_factory=dict)
+    code_block_map: Dict[str, Any] = field(default_factory=dict)
     dir_name_to_full_name: Dict[str, Dict[str, str]] = field(
         default_factory=dict
     )
@@ -109,6 +110,8 @@ class DFCXAgentExporter(BaseDFCXClient):
             ctx.webhook_map[full_name] = content
         elif res_type == "agentTransitionRouteGroups":
             ctx.agent_trg_map[full_name] = content
+        elif res_type == "codeBlocks":
+            ctx.code_block_map[full_name] = content
         ctx.dir_name_to_full_name.setdefault(res_type, {})[
             path_parts[1].replace(".json", "")
         ] = full_name
@@ -318,10 +321,12 @@ class DFCXAgentExporter(BaseDFCXClient):
 
                     path_parts = rel_path.split("/")
 
-                    # Flat resources: webhooks, agentTransitionRouteGroups
+                    # Flat resources: webhooks, agentTransitionRouteGroups,
+                    # codeBlocks
                     if len(path_parts) == 2 and path_parts[0] in [
                         "webhooks",
                         "agentTransitionRouteGroups",
+                        "codeBlocks",
                     ]:
                         DFCXAgentExporter._process_flat_resource(
                             ctx, path_parts, filename
@@ -543,6 +548,7 @@ class DFCXAgentExporter(BaseDFCXClient):
                     agent_transition_route_groups=list(
                         ctx.agent_trg_map.values()
                     ),
+                    code_blocks=list(ctx.code_block_map.values()),
                 )
 
                 return agent_ir

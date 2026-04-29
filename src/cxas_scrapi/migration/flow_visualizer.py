@@ -28,21 +28,21 @@ class FlowDependencyResolver:
 
         self.intents = {
             self._get_resource_id(intent): intent
-            for intent in full_agent_data.get("intents", [])
+            for intent in full_agent_data.intents
         }
         self.entities = {
             self._get_resource_id(entity): entity
-            for entity in full_agent_data.get("entityTypes", [])
+            for entity in full_agent_data.entity_types
         }
         self.tools = {
             self._get_resource_id(tool): tool
-            for tool in full_agent_data.get("tools", [])
+            for tool in full_agent_data.tools
         }
 
         # Map webhooks by both UUID and DisplayName to handle DFCX export
         # inconsistencies where either form may appear in fulfillment refs.
         self.webhooks: Dict[str, Any] = {}
-        for webhook_entry in full_agent_data.get("webhooks", []):
+        for webhook_entry in full_agent_data.webhooks:
             webhook_data = (
                 webhook_entry.get("value", webhook_entry)
                 if isinstance(webhook_entry, dict) and "value" in webhook_entry
@@ -55,7 +55,7 @@ class FlowDependencyResolver:
                 self.webhooks[display_name] = webhook_data
 
         self.name_map: Dict[str, str] = {}
-        for playbook_entry in full_agent_data.get("playbooks", []):
+        for playbook_entry in full_agent_data.playbooks:
             playbook_data = playbook_entry.get("playbook", playbook_entry)
             self.name_map[
                 self._get_resource_id(
@@ -63,11 +63,11 @@ class FlowDependencyResolver:
                     or playbook_entry.get("playbookId")
                 )
             ] = playbook_data.get("displayName", "Unknown")
-        for flow_entry in full_agent_data.get("flows", []):
-            flow_entry_data = flow_entry.get("flow_data", flow_entry)
+        for flow_entry in full_agent_data.flows:
+            flow_entry_data = flow_entry.flow_data
             self.name_map[
                 self._get_resource_id(
-                    flow_entry_data.get("name") or flow_entry.get("flowId")
+                    flow_entry_data.get("name") or flow_entry.flow_id
                 )
             ] = flow_entry_data.get("displayName", "Unknown")
 
@@ -170,8 +170,8 @@ class FlowDependencyResolver:
             ``entityTypes``, ``webhooks``, ``tools``, ``name_map``, and
             ``flow_type`` (1 = logic flow, 2 = conversational flow).
         """
-        flow_data = flow_wrapper.get("flow_data", flow_wrapper)
-        pages_data = flow_wrapper.get("pages", [])
+        flow_data = flow_wrapper.flow_data
+        pages_data = flow_wrapper.pages
 
         dependencies: Dict[str, Any] = {
             "flow": flow_data,
@@ -201,7 +201,7 @@ class FlowDependencyResolver:
         )
 
         for page_wrapper in pages_data:
-            page = page_wrapper.get("value", page_wrapper)
+            page = page_wrapper.page_data
             self._scan_fulfillment(
                 page.get("entryFulfillment") or page.get("onLoad"),
                 dependencies,
@@ -264,8 +264,8 @@ class FlowTreeVisualizer:
         self.flow = context_data["flow"]
         self.page_names: Dict[str, str] = {}
         for page_wrapper in self.context.get("pages", []):
-            page_data = page_wrapper.get("page_data", {})
-            page_id = page_wrapper.get("page_id")
+            page_data = page_wrapper.page_data
+            page_id = page_wrapper.page_id
             display_name = page_data.get("displayName")
             if page_id and display_name:
                 self.page_names[page_id.split("/")[-1]] = display_name
@@ -471,11 +471,11 @@ class FlowTreeVisualizer:
 
         for page_wrap in sorted(
             self.context.get("pages", []),
-            key=lambda page_entry: page_entry.get("page_data", page_entry).get(
+            key=lambda page_entry: page_entry.page_data.get(
                 "displayName", ""
             ),
         ):
-            page = page_wrap.get("page_data", page_wrap)
+            page = page_wrap.page_data
             page_name = page.get("displayName", "Unnamed")
             page_node = struct_node.add(
                 f":page_facing_up: [bold cyan]{page_name}[/]"

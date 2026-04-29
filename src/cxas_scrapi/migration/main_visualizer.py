@@ -58,7 +58,7 @@ class MainVisualizer:
         """Build a Rich Tree summarising tools and webhooks."""
         root = Tree("🛠️ [bold orange3]Agent Tools & Webhooks[/bold orange3]")
 
-        tools = self.data.get("tools", [])
+        tools = self.data.tools
         if tools:
             tools_node = root.add("[bold]Tools[/]")
             for tool_entry in tools:
@@ -94,7 +94,7 @@ class MainVisualizer:
                             f"{escape(str(data_store['dataStoreConnections']))}"
                         )
 
-        webhooks = self.data.get("webhooks", [])
+        webhooks = self.data.webhooks
         if webhooks:
             wh_nodes = root.add("[bold]Webhooks[/]")
             for webhook_entry in webhooks:
@@ -288,7 +288,7 @@ class MainVisualizer:
             Panel(self._build_tools_tree(), border_style="orange3")
         )
 
-        playbooks = self.data.get("playbooks", [])
+        playbooks = self.data.playbooks
         if playbooks:
             if HAS_IPYTHON:
                 display(HTML("<hr><h3>📘 Selected Playbooks</h3>"))
@@ -304,7 +304,7 @@ class MainVisualizer:
                     )
                 )
 
-        flows = self.data.get("flows", [])
+        flows = self.data.flows
         if flows:
             if HAS_IPYTHON:
                 display(HTML("<hr><h3>🔀 Selected Flows</h3>"))
@@ -344,7 +344,7 @@ class MainVisualizer:
             Panel(self._build_tools_tree(), border_style="orange3")
         )
 
-        playbooks = self.data.get("playbooks", [])
+        playbooks = self.data.playbooks
         if playbooks:
             capture_console.print("\n### Selected Playbooks ###\n")
             for playbook_wrapper in playbooks:
@@ -356,7 +356,7 @@ class MainVisualizer:
                     )
                 )
 
-        flows = self.data.get("flows", [])
+        flows = self.data.flows
         if flows:
             capture_console.print("\n### Selected Flows ###\n")
             resolver = FlowDependencyResolver(self.data)

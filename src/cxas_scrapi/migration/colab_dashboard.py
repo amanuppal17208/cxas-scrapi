@@ -14,13 +14,16 @@
 
 import asyncio
 import copy
+import io
 import json
 import logging
 import os
 import re
 import time
+import traceback
 from datetime import datetime
 
+import google.auth
 import ipywidgets as widgets
 from IPython.display import clear_output, display
 
@@ -46,11 +49,16 @@ class MigrationConfigurator:
         self.layout = widgets.Layout(width="98%")
 
         default_project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
+        if not default_project:
+            try:
+                _, default_project = google.auth.default()
+            except Exception:
+                default_project = ""
 
         self.project_id = widgets.Text(
-            description="Project ID:",
-            placeholder="e.g., my-gcp-project",
-            value=default_project,
+            description="Target Project ID:",
+            placeholder="e.g., my-gcp-project (Defaults to auth project)",
+            value=default_project or "",
             style=self.style,
             layout=self.layout,
         )
@@ -85,7 +93,7 @@ class MigrationConfigurator:
                 ("2.0 (Beta, Playbooks/Flows/Hybrid)", "2.0"),
                 ("1.0 (Legacy, Playbooks only)", "1.0"),
             ],
-            value="1.0",
+            value="2.0",
             description="Logic Version:",
             style=self.style,
             layout=self.layout,
@@ -129,18 +137,25 @@ class MigrationConfigurator:
         )
 
     def get_config(self) -> MigrationConfig:
-        return MigrationConfig(
-            project_id=self.project_id.value,
-            target_name=self.target_name.value,
-            env=self.env.value,
-            model=self.model.value,
-            gen_report=self.gen_report.value,
-            gen_unit_tests=self.gen_unit_tests.value,
-            gen_hillclimbing_evals=self.gen_hillclimbing_evals.value,
-            eval_runner_target=self.eval_runner_target.value,
-            migration_version=self.migration_version.value,
-            optimize_for_cxas=False,
-        )
+        print(">>> get_config entered")
+        try:
+            config = MigrationConfig(
+                project_id=self.project_id.value,
+                target_name=self.target_name.value,
+                env=self.env.value,
+                model=self.model.value,
+                gen_report=self.gen_report.value,
+                gen_unit_tests=self.gen_unit_tests.value,
+                gen_hillclimbing_evals=self.gen_hillclimbing_evals.value,
+                eval_runner_target=self.eval_runner_target.value,
+                migration_version=self.migration_version.value,
+                optimize_for_cxas=False,
+            )
+            print(">>> get_config success")
+            return config
+        except Exception as e:
+            print(f">>> get_config failed: {e}")
+            raise e
 
 
 class AgentResourceSelector:
@@ -311,8 +326,7 @@ class AgentResourceSelector:
                 selected_ids.append(row["data"].get("name"))
         for cb in self.checkboxes["flows"]:
             if cb.value:
-                f = cb.data_ref.get("flow", cb.data_ref)
-                selected_ids.append(f.get("name"))
+                selected_ids.append(cb.data_ref.flow_id)
         outgoing, incoming = self.analyzer.get_impact(selected_ids)
         with self.analysis_output:
             clear_output()
@@ -389,21 +403,21 @@ class AgentResourceSelector:
     def _build_ui(self, default_model):
         self.checkboxes = {"playbooks": [], "flows": [], "config": []}
         self.playbook_rows = []
-        agent_name = self.full_agent_data.get("displayName", "Unknown Agent")
+        agent_name = self.full_agent_data.display_name or "Unknown Agent"
         self.checkboxes["config"].append(
             self._create_checkbox(
                 f"Agent Settings ({agent_name})",
                 "config",
-                self.full_agent_data.get("agent", {}),
+                self.full_agent_data,
             )
         )
         playbook_ui_items = []
-        for pb in self.full_agent_data.get("playbooks", []):
+        for pb in self.full_agent_data.playbooks:
             cb, row_ui = self._create_playbook_row(pb, default_model)
             self.checkboxes["playbooks"].append(cb)
             playbook_ui_items.append(row_ui)
-        for flow in self.full_agent_data.get("flows", []):
-            actual_flow = flow.get("flow_data", flow)
+        for flow in self.full_agent_data.flows:
+            actual_flow = flow.flow_data
             self.checkboxes["flows"].append(
                 self._create_checkbox(
                     actual_flow.get("displayName", "Unnamed"), "flow", flow
@@ -501,16 +515,16 @@ class AgentResourceSelector:
                 pb_data = copy.deepcopy(row["data"])
                 pb_data["_target_model"] = row["dropdown"].value
                 selected_pbs_data.append(pb_data)
-        filtered_data["playbooks"] = selected_pbs_data
+        filtered_data.playbooks = selected_pbs_data
         selected_flows = [
-            cb.data_ref.get("flow", cb.data_ref).get("name")
+            cb.data_ref.flow_id
             for cb in self.checkboxes["flows"]
             if cb.value
         ]
-        filtered_data["flows"] = [
+        filtered_data.flows = [
             f
-            for f in filtered_data["flows"]
-            if f.get("flow", f).get("name") in selected_flows
+            for f in filtered_data.flows
+            if f.flow_id in selected_flows
         ]
         return filtered_data
 
@@ -601,9 +615,13 @@ def render_migration_dashboard(cx_api, migration_service):
             with output_log:
                 logger.warning("⚠️ Please enter a Source Agent ID.")
             return
+        with output_log:
+            print(f"⌛ Loading agent {agent_id_input.value} ...")
         selector_ui.load_agent(
             agent_id_input.value, default_model=config_ui.model.value
         )
+        with output_log:
+            print("✅ Agent loaded successfully.")
 
     def on_upload_change(change):
         if not upload_btn.value:
@@ -632,9 +650,13 @@ def render_migration_dashboard(cx_api, migration_service):
             logger.debug(f"Non-fatal error clearing widget state: {e}")
 
         with output_log:
-            logger.info(f"📂 Processing uploaded file: {filename}...")
+            print(f"📂 Processing uploaded file: {filename}...")
+            print("⌛ Parsing zip content...")
 
         agent_data = cx_api.process_local_agent_zip(content)
+
+        with output_log:
+            print("✅ Zip content parsed successfully.")
 
         if agent_data:
             selector_ui.load_agent_from_data(
@@ -649,8 +671,8 @@ def render_migration_dashboard(cx_api, migration_service):
     def on_visualize_click(b):
         filtered_data = selector_ui.get_selected_data()
         if not filtered_data or (
-            not filtered_data.get("playbooks")
-            and not filtered_data.get("flows")
+            not filtered_data.playbooks
+            and not filtered_data.flows
         ):
             with output_log:
                 logger.error(
@@ -676,8 +698,8 @@ def render_migration_dashboard(cx_api, migration_service):
     def on_export_viz_click(b):
         filtered_data = selector_ui.get_selected_data()
         if not filtered_data or (
-            not filtered_data.get("playbooks")
-            and not filtered_data.get("flows")
+            not filtered_data.playbooks
+            and not filtered_data.flows
         ):
             with output_log:
                 logger.error(
@@ -690,43 +712,94 @@ def render_migration_dashboard(cx_api, migration_service):
             logger.info("Exporting visualizations (SVG and Markdown)...")
             visualizer = MainVisualizer(filtered_data)
             config = config_ui.get_config()
-            prefix = config["target_name"] if config["target_name"] else "agent"
+            prefix = config.target_name if config.target_name else "agent"
             visualizer.export_visualizations(prefix)
             logger.info(
                 "✅ Export completed. Downloads should start automatically."
             )
 
     def on_migrate_click(b):
+        print(">>> on_migrate_click triggered (terminal)")
         with output_log:
-            clear_output()
-            config = config_ui.get_config()
+            # clear_output()
+            print(">>> on_migrate_click triggered (widget)")
+            logger.info(">>> on_migrate_click triggered")
+            try:
+                config = config_ui.get_config()
+                print(f">>> Config obtained: {config.target_name}")
 
-            if not config.target_name:
-                logger.error("❌ Error: Target Agent Name is required.")
-                return
+                if not config.target_name:
+                    print("❌ Error: Target Agent Name is required.")
+                    return
 
-            logger.info(
-                f"🚀 Starting Migration to '{config.target_name}' "
-                f"({config.env})..."
-            )
-
-            filtered_data = selector_ui.get_selected_data()
-            if not filtered_data:
-                logger.error(
-                    "❌ Error: No agent data loaded. Please Load ID or "
-                    "Upload Zip first."
-                )
-                return
-
-            config.source_agent_data_override = filtered_data
-
-            async def _run():
-                await migration_service.run_migration(
-                    source_cx_agent_id=agent_id_input.value or "uploaded-agent",
-                    config=config,
+                print(
+                    f"🚀 Starting Migration to '{config.target_name}' "
+                    f"({config.env})..."
                 )
 
-            asyncio.create_task(_run())
+                filtered_data = selector_ui.get_selected_data()
+                display_name = (
+                    filtered_data.display_name if filtered_data else "None"
+                )
+                print(f">>> Data loaded: {display_name}")
+
+                print(">>> DEBUG: Before check if not filtered_data")
+                if not filtered_data:
+                    print(
+                        "❌ Error: No agent data loaded. Please Load ID or "
+                        "Upload Zip first."
+                    )
+                    return
+                print(">>> DEBUG: After check if not filtered_data")
+
+                config.source_agent_data_override = filtered_data
+
+                log_file = f"migration_{config.target_name}.log"
+                file_handler = logging.FileHandler(log_file)
+                file_handler.setFormatter(
+                    logging.Formatter(
+                        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                    )
+                )
+                logger_to_use = logging.getLogger("cxas_scrapi")
+                logger_to_use.addHandler(file_handler)
+                logger_to_use.setLevel(logging.INFO)
+                print(f">>> Logs are being written to {log_file}")
+
+                async def _run():
+                    with output_log:
+                        print(">>> DEBUG: _run entered")
+                        output_log.append_stdout(
+                            ">>> Background task _run started\n"
+                        )
+                        try:
+                            await migration_service.run_migration(
+                                source_cx_agent_id=(
+                                    agent_id_input.value or "uploaded-agent"
+                                ),
+                                config=config,
+                            )
+                        except Exception as e:
+                            output_log.append_stderr(
+                                f"❌ Migration failed inside _run: {e}\n"
+                            )
+
+                            buf = io.StringIO()
+                            traceback.print_exc(file=buf)
+                            output_log.append_stderr(buf.getvalue())
+                        finally:
+                            logger_to_use.removeHandler(file_handler)
+                            file_handler.close()
+
+                print(">>> Scheduling background task...")
+                asyncio.create_task(_run())
+            except Exception as e:
+                output_log.append_stderr(f"❌ Error in on_migrate_click: {e}\n")
+
+                buf = io.StringIO()
+                traceback.print_exc(file=buf)
+                output_log.append_stderr(buf.getvalue())
+
 
     load_btn.on_click(on_load_click)
     upload_btn.observe(on_upload_change, names="value")
