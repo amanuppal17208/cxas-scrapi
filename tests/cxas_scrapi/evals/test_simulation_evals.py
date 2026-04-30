@@ -14,10 +14,10 @@
 
 """Unit tests for the eval conversation utility."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
 
 from cxas_scrapi.evals.simulation_evals import (
     LLMUserConversation,
@@ -620,13 +620,16 @@ def test_simulation_evals_send_request_with_retry_success():
     with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
         with patch("cxas_scrapi.core.apps.AgentServiceClient"):
             evals = SimulationEvals(app_name=app_name)
-    
+
     evals.sessions_client = MagicMock()
-    evals.sessions_client.run.side_effect = [Exception("Transient"), MagicMock()]
-    
+    evals.sessions_client.run.side_effect = [
+        Exception("Transient"),
+        MagicMock(),
+    ]
+
     with patch("time.sleep"):  # Avoid slowing down tests
         res = evals._send_request_with_retry("sid", "hi", {}, "text", False)
-    
+
     assert evals.sessions_client.run.call_count == 2
     assert res is not None
 
@@ -636,15 +639,15 @@ def test_simulation_evals_send_request_with_retry_failure():
     with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
         with patch("cxas_scrapi.core.apps.AgentServiceClient"):
             evals = SimulationEvals(app_name=app_name)
-    
+
     evals.sessions_client = MagicMock()
     evals.sessions_client.run.side_effect = Exception("Permanent")
     evals.max_retries = 2
-    
+
     with patch("time.sleep"):
         with pytest.raises(Exception, match="Permanent"):
             evals._send_request_with_retry("sid", "hi", {}, "text", False)
-    
+
     assert evals.sessions_client.run.call_count == 2
 
 
@@ -655,7 +658,7 @@ def test_llm_user_prepare_llm_prompt():
     }
     conv = LLMUserConversation(mock_genai_client, "model", test_case)
     prompt = conv._prepare_llm_prompt()
-    
+
     assert "greet" in prompt
     assert "hi" in prompt
     assert "Conversation History" in prompt
@@ -666,10 +669,10 @@ def test_simulation_evals_prepare_simulation_jobs():
     with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
         with patch("cxas_scrapi.core.apps.AgentServiceClient"):
             evals = SimulationEvals(app_name=app_name)
-    
+
     test_cases = [{"name": "tc1"}, {"name": "tc2"}]
     jobs = evals._prepare_simulation_jobs(test_cases, runs=2)
-    
+
     assert len(jobs) == 4
     assert jobs[0] == (test_cases[0], 0)
     assert jobs[1] == (test_cases[0], 1)
@@ -681,14 +684,14 @@ def test_simulation_evals_aggregate_simulation_results_parallel():
     with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
         with patch("cxas_scrapi.core.apps.AgentServiceClient"):
             evals = SimulationEvals(app_name=app_name)
-    
+
     evals._run_single_simulation_job = MagicMock(return_value={"status": "ok"})
     jobs = [({"name": "tc1"}, 0), ({"name": "tc1"}, 1)]
-    
+
     results = evals._aggregate_simulation_results(
         jobs, runs=2, parallel=2, model="m", modality="text", verbose=False
     )
-    
+
     assert len(results) == 2
     assert all(r["status"] == "ok" for r in results)
     assert evals._run_single_simulation_job.call_count == 2
@@ -700,19 +703,25 @@ def test_simulation_evals_get_turns_from_platform(mock_ch_class):
     with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
         with patch("cxas_scrapi.core.apps.AgentServiceClient"):
             evals = SimulationEvals(app_name=app_name)
-    
+
     mock_ch = mock_ch_class.return_value
     mock_conv = MagicMock()
     # Mocking the dictionary conversion behavior
     mock_conv_dict = {
-        "turns": [{"messages": [{"role": "user", "chunks": [{"text": "hello"}]}]}]
+        "turns": [
+            {
+                "messages": [
+                    {"role": "user", "chunks": [{"text": "hello"}]}
+                ]
+            }
+        ]
     }
     # SimulationEvals uses type(conv_obj).to_dict(conv_obj)
     with patch("cxas_scrapi.evals.simulation_evals.type") as mock_type:
         mock_type.return_value.to_dict.return_value = mock_conv_dict
         mock_ch.get_conversation.return_value = mock_conv
-        
+
         turns = evals._get_turns_from_platform("sid")
-    
+
     assert len(turns) == 1
     assert turns[0].user == "hello"
