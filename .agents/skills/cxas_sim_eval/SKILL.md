@@ -3,7 +3,7 @@ name: cxas_sim_eval
 description: >-
   Converts CXAS golden evaluations to SCRAPI SimulationEvals test cases.
   Use when generating high-level, goal-oriented test cases from turn-by-turn evaluation JSONs,
-  and when enriching test expectations with inferred tool calls.
+  enriching test expectations with inferred tool calls, and running text or voice based simulations.
 ---
 
 # CXAS Evaluation to Simulation Converter
@@ -101,6 +101,21 @@ python .agents/skills/cxas_sim_eval/scripts/run_evals.py \
   --app-name "projects/.../locations/.../apps/..." \
   --output-dir /path/to/output_directory \
   --parallelism 5 \
+  --start-index 0 \
+  --end-index 10
+```
+
+### 5. Run Voice Evaluations
+`scripts/run_voice_evals_continuous.py`
+
+Runs continuous voice simulations using bidirectional streaming, logs raw results, and generates an HTML report.
+
+Usage:
+```bash
+python .agents/skills/cxas_sim_eval/scripts/run_voice_evals_continuous.py \
+  --app-name "projects/.../locations/.../apps/..." \
+  --output-dir /path/to/output_directory \
+  --parallelism 1 \
   --start-index 0 \
   --end-index 10
 ```
