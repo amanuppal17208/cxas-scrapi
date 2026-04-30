@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 def _resolve_app_args(
     app_identifier: str, args: argparse.Namespace
 ) -> tuple[Apps, str, str]:
-    """Resolves project, location, Apps client, app_id, and display_name."""
+    """Resolves project, location, Apps client, app_name, and display_name."""
     project_id = (
         Common._get_project_id(app_identifier)
         if Common._get_project_id(app_identifier)
@@ -54,19 +54,19 @@ def _resolve_app_args(
         sys.exit(1)
 
     apps_client = Apps(project_id=project_id, location=location)
-    app_id = app_identifier
+    app_name = app_identifier
     display_name = app_identifier
 
     if "projects/" not in app_identifier:
         app = apps_client.get_app_by_display_name(app_identifier)
         if app:
-            app_id = app.name
+            app_name = app.name
             display_name = app.display_name
         else:
             print(f"App '{app_identifier}' not found.")
             sys.exit(1)
 
-    return apps_client, app_id, display_name
+    return apps_client, app_name, display_name
 
 
 def _handle_import_result(result: Any, success_verb: str) -> Optional[str]:
@@ -89,16 +89,20 @@ def app_pull(args: argparse.Namespace) -> None:
     """Handles the 'pull' command."""
     print(f"Pulling app: {args.app}")
 
-    apps_client, app_id, _ = _resolve_app_args(args.app, args)
+    apps_client, app_name, _ = _resolve_app_args(args.app, args)
 
+    _app_pull(apps_client, app_name, args.target_dir)
+
+
+def _app_pull(apps_client: Apps, app_name: str, target_dir: str) -> None:
+    """Helper to pull an app from CXAS."""
     try:
         # Export the app
         print("Exporting app from CXAS...")
-        lro = apps_client.export_app(app_name=app_id)
+        lro = apps_client.export_app(app_name=app_name)
         response = lro.result()
 
         # Determine the target directory
-        target_dir = args.target_dir if args.target_dir else "."
         if not os.path.exists(target_dir):
             os.makedirs(target_dir)
 
@@ -119,6 +123,39 @@ def app_push(args: argparse.Namespace) -> Optional[str]:  # noqa: C901
     app_dir = args.app_dir if args.app_dir else "."
     print(f"Pushing app from {app_dir}...")
 
+    target_app = getattr(args, "to", None)
+    app_name_arg = getattr(args, "app_name", None)
+    identifier = target_app or app_name_arg
+
+    if identifier:
+        apps_client, app_name, display_name = _resolve_app_args(
+            identifier, args)
+        print("Pushing to existing app... Overwriting if supported.")
+    else:
+        apps_client = Apps(project_id=args.project_id, location=args.location)
+        app_name = None
+        print("No target specified, using existing name if needed.")
+        display_name = getattr(args, "display_name", None) or "Pushed Agent"
+
+    _app_push(
+        app_dir=app_dir,
+        apps_client=apps_client,
+        target_app_name=getattr(args, "app_name", None) or app_name,
+        identifier=getattr(args, "to", None) or getattr(args, "app_name", None),
+        display_name=getattr(args, "display_name", None) or display_name,
+        env_file=getattr(args, "env_file", None),
+    )
+
+
+def _app_push(
+    app_dir: str,
+    apps_client: Apps = None,
+    target_app_name: str = None,
+    identifier: str = None,
+    display_name: str = None,
+    env_file: str = None,
+) -> Optional[str]:
+    """Helper to push an app to CXAS."""
     temp_dir = tempfile.mkdtemp()
     inner_dir = os.path.join(temp_dir, "agent")
     os.makedirs(inner_dir)
@@ -150,7 +187,6 @@ def app_push(args: argparse.Namespace) -> Optional[str]:  # noqa: C901
                 shutil.copy2(src_path, dst_path)
 
     # Inject explicit env_file if provided
-    env_file = getattr(args, "env_file", None)
     if env_file:
         if os.path.exists(env_file):
             dst_path = os.path.join(inner_dir, "environment.json")
@@ -173,45 +209,20 @@ def app_push(args: argparse.Namespace) -> Optional[str]:  # noqa: C901
         with open(temp_zip, "rb") as f:
             app_content = f.read()
 
-        target_app = getattr(args, "to", None)
-        app_id_arg = getattr(args, "app_id", None)
-        identifier = target_app or app_id_arg
-
-        if identifier:
-            apps_client, app_id, display_name = _resolve_app_args(
-                identifier, args
-            )
-            print("Pushing to existing app... Overwriting if supported.")
-        else:
-            apps_client = Apps(
-                project_id=args.project_id, location=args.location
-            )
-            app_id = None
-            print("No target specified, using existing name if needed.")
-            display_name = getattr(args, "display_name", None) or "Pushed Agent"
-
         # If no target is specified, the SDK creates a new app with the
         # provided display_name.
         print("Uploading to CES...")
 
-        # In v1beta, setting the app resource name and conflict strategy allows
-        # overwriting an app explicitly. Not all SDK versions support app_id
-        # natively in import.
-        target_app_id = getattr(args, "app_id", None) or app_id
-
-        if target_app_id:
-            # Extract UUID if full resource name provided.
-            if "apps/" in target_app_id:
-                target_app_id = target_app_id.split("apps/")[-1]
+        if target_app_name:
             result = apps_client.import_app(
-                app_name=target_app_id, app_content=app_content
+                app_name=target_app_name, app_content=app_content
             )
         else:
             result = apps_client.import_as_new_app(
                 display_name=display_name, app_content=app_content
             )
         return _handle_import_result(
-            result, "pushed to" if target_app else "pushed"
+            result, "pushed to" if identifier else "pushed"
         )
 
     except Exception as e:
@@ -228,7 +239,7 @@ def app_create(args: argparse.Namespace) -> None:
     apps_client = Apps(project_id=args.project_id, location=args.location)
     try:
         app = apps_client.create_app(
-            app_id=getattr(args, "app_name", None),
+            app_id=getattr(args, "app_id", None),
             display_name=args.name,
             description=args.description,
         )
@@ -247,12 +258,12 @@ def app_delete(args: argparse.Namespace) -> None:
         print(f"Deleting App: {app_name_arg}")
         project_id = Common._get_project_id(app_name_arg)
         location = Common._get_location(app_name_arg)
-        app_id = app_name_arg
+        app_name = app_name_arg
     elif args.display_name and args.project_id and args.location:
         print(f"Deleting App by Display Name: {args.display_name}")
         project_id = args.project_id
         location = args.location
-        app_id = None
+        app_name = None
     else:
         print(
             "Error: Must provide either --app_name OR "
@@ -267,12 +278,12 @@ def app_delete(args: argparse.Namespace) -> None:
     apps_client = Apps(project_id=project_id, location=location)
 
     try:
-        if not app_id:
+        if not app_name:
             # Lookup by display name
             app = apps_client.get_app_by_display_name(args.display_name)
             if app:
-                app_id = app.name
-                print(f"Found app ID: {app_id}")
+                app_name = app.name
+                print(f"Found app ID: {app_name}")
             else:
                 print(
                     f"App with display name '{args.display_name}' "
@@ -280,8 +291,8 @@ def app_delete(args: argparse.Namespace) -> None:
                 )
                 return
 
-        apps_client.delete_app(app_name=app_id, force=args.force)
-        print(f"Successfully deleted {app_id}")
+        apps_client.delete_app(app_name=app_name, force=args.force)
+        print(f"Successfully deleted {app_name}")
     except Exception as e:
         print(f"Failed to delete app: {e}")
         sys.exit(1)
@@ -292,23 +303,35 @@ def app_branch(args: argparse.Namespace) -> None:
     print(f"Branching from {args.source} to {args.new_name}")
     # Composite operation: pull existing, create new, push content.
 
-    apps_client, app_id, _ = _resolve_app_args(args.source, args)
+    apps_client, app_name, _ = _resolve_app_args(args.source, args)
+    env_file = getattr(args, "env_file", None)
 
-    try:
-        print("Pulling source app...")
-        lro = apps_client.export_app(app_name=app_id)
-        response = lro.result()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        try:
+            print("Pulling source app...")
+            _app_pull(apps_client, app_name, temp_dir)
 
-        # Import exported content directly into new app.
-        result = apps_client.import_as_new_app(
-            app_content=response.app_content,
-            display_name=args.new_name,
-        )
-        _handle_import_result(result, "created branch")
+            extracted_dirs = [
+                d
+                for d in os.listdir(temp_dir)
+                if os.path.isdir(os.path.join(temp_dir, d))
+            ]
+            app_dir = (
+                os.path.join(temp_dir, extracted_dirs[0])
+                if extracted_dirs
+                else temp_dir
+            )
 
-    except Exception as e:
-        print(f"Failed to branch app: {e}")
-        sys.exit(1)
+            print("Pushing branched app...")
+            _app_push(
+                app_dir=app_dir,
+                apps_client=apps_client,
+                display_name=args.new_name,
+                env_file=env_file,
+            )
+        except Exception as e:
+            print(f"Failed to branch app: {e}")
+            sys.exit(1)
 
 
 def apps_list(args: argparse.Namespace) -> None:
@@ -345,10 +368,10 @@ def apps_get(args: argparse.Namespace) -> None:
     """Handles the 'apps get' command."""
     print(f"Getting app: {args.app}")
 
-    apps_client, app_id, _ = _resolve_app_args(args.app, args)
+    apps_client, app_name, _ = _resolve_app_args(args.app, args)
 
     try:
-        app = apps_client.get_app(app_id=app_id)
+        app = apps_client.get_app(app_name=app_name)
         print("\nApp Details:")
         print(f"Name: {app.name}")
         print(f"Display Name: {app.display_name}")

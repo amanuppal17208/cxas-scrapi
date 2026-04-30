@@ -983,5 +983,3 @@ class SimulationEvals(Apps):
                 f.write(yaml_content)
 
         return yaml_content
-
-

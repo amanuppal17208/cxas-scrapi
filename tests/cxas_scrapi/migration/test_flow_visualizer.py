@@ -17,6 +17,10 @@
 from rich.console import Console
 from rich.tree import Tree
 
+from cxas_scrapi.migration.data_models import (
+    DFCXAgentIR,
+    DFCXFlowModel,
+)
 from cxas_scrapi.migration.flow_visualizer import (
     FlowDependencyResolver,
     FlowTreeVisualizer,
@@ -33,13 +37,16 @@ FLOW_UUID = "flow-uuid-1"
 PAGE_UUID = "page-uuid-1"
 
 MINIMAL_AGENT_DATA = {
+    "name": "projects/p/locations/l/agents/a",
+    "display_name": "Minimal Agent",
+    "default_language_code": "en",
     "intents": [
         {
             "name": f"projects/p/locations/l/agents/a/intents/{INTENT_UUID}",
             "displayName": "confirm.yes",
         }
     ],
-    "entityTypes": [
+    "entity_types": [
         {
             "name": (
                 f"projects/p/locations/l/agents/a/entityTypes/{ENTITY_UUID}"
@@ -60,7 +67,8 @@ MINIMAL_AGENT_DATA = {
     "playbooks": [],
     "flows": [
         {
-            "flow": {
+            "flow_id": f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}",
+            "flow_data": {
                 "name": (f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}"),
                 "displayName": "Main Flow",
             },
@@ -70,7 +78,8 @@ MINIMAL_AGENT_DATA = {
 }
 
 FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK = {
-    "flow": {
+    "flow_id": f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}",
+    "flow_data": {
         "name": f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}",
         "displayName": "Test Flow",
         "transitionRoutes": [
@@ -94,8 +103,11 @@ FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK = {
     },
     "pages": [
         {
-            "key": PAGE_UUID,
-            "value": {
+            "page_id": (
+                f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}/"
+                f"pages/{PAGE_UUID}"
+            ),
+            "page_data": {
                 "displayName": "Collect Info",
                 "transitionRoutes": [],
                 "eventHandlers": [],
@@ -105,7 +117,8 @@ FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK = {
 }
 
 CONVERSATIONAL_FLOW_WRAPPER = {
-    "flow": {
+    "flow_id": f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}",
+    "flow_data": {
         "name": f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}",
         "displayName": "Conversational Flow",
         "transitionRoutes": [],
@@ -116,7 +129,8 @@ CONVERSATIONAL_FLOW_WRAPPER = {
 }
 
 LOGIC_FLOW_WRAPPER = {
-    "flow": {
+    "flow_id": f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}",
+    "flow_data": {
         "name": f"projects/p/locations/l/agents/a/flows/{FLOW_UUID}",
         "displayName": "Logic Flow",
         "transitionRoutes": [
@@ -141,45 +155,58 @@ LOGIC_FLOW_WRAPPER = {
 
 class TestFlowDependencyResolver:
     def setup_method(self):
-        self.resolver = FlowDependencyResolver(MINIMAL_AGENT_DATA)
+        self.resolver = FlowDependencyResolver(
+            DFCXAgentIR(**MINIMAL_AGENT_DATA)
+        )
 
     def test_collects_intent_from_transition_route(self):
-        result = self.resolver.resolve(FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        result = self.resolver.resolve(
+            DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        )
         intent_names = [i.get("displayName") for i in result["intents"]]
         assert "confirm.yes" in intent_names
 
     def test_collects_webhook_from_fulfillment(self):
-        result = self.resolver.resolve(FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        result = self.resolver.resolve(
+            DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        )
         wh_names = [w.get("displayName") for w in result["webhooks"]]
         assert "MyWebhook" in wh_names
 
     def test_flow_type_1_for_logic_flow(self):
-        result = self.resolver.resolve(LOGIC_FLOW_WRAPPER)
+        result = self.resolver.resolve(DFCXFlowModel(**LOGIC_FLOW_WRAPPER))
         assert result["flow_type"] == 1
 
     def test_flow_type_2_for_conversational_flow(self):
-        result = self.resolver.resolve(CONVERSATIONAL_FLOW_WRAPPER)
+        result = self.resolver.resolve(
+            DFCXFlowModel(**CONVERSATIONAL_FLOW_WRAPPER)
+        )
         assert result["flow_type"] == 2
 
     def test_pages_preserved_in_result(self):
-        result = self.resolver.resolve(FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        result = self.resolver.resolve(
+            DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        )
         assert len(result["pages"]) == 1
-        assert result["pages"][0]["key"] == PAGE_UUID
+        assert PAGE_UUID in result["pages"][0].page_id
 
     def test_name_map_contains_flow(self):
-        result = self.resolver.resolve(FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        result = self.resolver.resolve(
+            DFCXFlowModel(**FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK)
+        )
         assert FLOW_UUID in result["name_map"]
         assert result["name_map"][FLOW_UUID] == "Main Flow"
 
     def test_no_intents_when_no_routes(self):
-        result = self.resolver.resolve(LOGIC_FLOW_WRAPPER)
+        result = self.resolver.resolve(DFCXFlowModel(**LOGIC_FLOW_WRAPPER))
         assert result["intents"] == []
 
     def test_webhook_lookup_by_display_name(self):
         """Webhooks referenced by displayName (not UUID) should be resolved."""
         agent_data = dict(MINIMAL_AGENT_DATA)
         flow_wrapper = {
-            "flow": {
+            "flow_id": f"projects/p/l/a/flows/{FLOW_UUID}",
+            "flow_data": {
                 "name": f"projects/p/l/a/flows/{FLOW_UUID}",
                 "displayName": "Test",
                 "transitionRoutes": [
@@ -193,14 +220,17 @@ class TestFlowDependencyResolver:
             },
             "pages": [],
         }
-        resolver = FlowDependencyResolver(agent_data)
-        result = resolver.resolve(flow_wrapper)
+        resolver = FlowDependencyResolver(DFCXAgentIR(**agent_data))
+        result = resolver.resolve(DFCXFlowModel(**flow_wrapper))
         assert len(result["webhooks"]) == 1
 
     def test_entity_collected_from_form_parameter(self):
         agent_data = {
+            "name": "projects/p/locations/l/agents/a",
+            "display_name": "Test Agent",
+            "default_language_code": "en",
             "intents": [],
-            "entityTypes": [
+            "entity_types": [
                 {
                     "name": (f"projects/p/l/a/entityTypes/{ENTITY_UUID}"),
                     "displayName": "YesNo",
@@ -212,7 +242,8 @@ class TestFlowDependencyResolver:
             "flows": [],
         }
         flow_with_form = {
-            "flow": {
+            "flow_id": "projects/p/l/a/flows/f1",
+            "flow_data": {
                 "name": "projects/p/l/a/flows/f1",
                 "displayName": "Form Flow",
                 "transitionRoutes": [],
@@ -220,8 +251,8 @@ class TestFlowDependencyResolver:
             },
             "pages": [
                 {
-                    "key": PAGE_UUID,
-                    "value": {
+                    "page_id": PAGE_UUID,
+                    "page_data": {
                         "displayName": "Slot Page",
                         "form": {
                             "parameters": [
@@ -240,8 +271,8 @@ class TestFlowDependencyResolver:
                 }
             ],
         }
-        resolver = FlowDependencyResolver(agent_data)
-        result = resolver.resolve(flow_with_form)
+        resolver = FlowDependencyResolver(DFCXAgentIR(**agent_data))
+        result = resolver.resolve(DFCXFlowModel(**flow_with_form))
         entity_names = [e.get("displayName") for e in result["entityTypes"]]
         assert "YesNo" in entity_names
 
@@ -262,9 +293,9 @@ class TestFlowTreeVisualizer:
     def _make_context(self, flow_wrapper=None, extra=None):
         """Build a resolved context dict for the visualizer."""
         agent_data = dict(MINIMAL_AGENT_DATA)
-        resolver = FlowDependencyResolver(agent_data)
+        resolver = FlowDependencyResolver(DFCXAgentIR(**agent_data))
         wrapper = flow_wrapper or FLOW_WRAPPER_WITH_INTENT_AND_WEBHOOK
-        ctx = resolver.resolve(wrapper)
+        ctx = resolver.resolve(DFCXFlowModel(**wrapper))
         if extra:
             ctx.update(extra)
         return ctx
@@ -307,7 +338,8 @@ class TestFlowTreeVisualizer:
 
     def test_event_handler_rendered(self):
         flow_with_event = {
-            "flow": {
+            "flow_id": "projects/p/l/a/flows/f1",
+            "flow_data": {
                 "name": "projects/p/l/a/flows/f1",
                 "displayName": "Event Flow",
                 "transitionRoutes": [],
@@ -320,15 +352,16 @@ class TestFlowTreeVisualizer:
             },
             "pages": [],
         }
-        ctx = FlowDependencyResolver(MINIMAL_AGENT_DATA).resolve(
-            flow_with_event
+        ctx = FlowDependencyResolver(DFCXAgentIR(**MINIMAL_AGENT_DATA)).resolve(
+            DFCXFlowModel(**flow_with_event)
         )
         rendered = _render_tree_to_str(FlowTreeVisualizer(ctx).build_tree())
         assert "sys.no-match-1" in rendered
 
     def test_set_parameter_action_rendered(self):
         flow_with_set_param = {
-            "flow": {
+            "flow_id": "projects/p/l/a/flows/f1",
+            "flow_data": {
                 "name": "projects/p/l/a/flows/f1",
                 "displayName": "Param Flow",
                 "transitionRoutes": [
@@ -345,8 +378,8 @@ class TestFlowTreeVisualizer:
             },
             "pages": [],
         }
-        ctx = FlowDependencyResolver(MINIMAL_AGENT_DATA).resolve(
-            flow_with_set_param
+        ctx = FlowDependencyResolver(DFCXAgentIR(**MINIMAL_AGENT_DATA)).resolve(
+            DFCXFlowModel(**flow_with_set_param)
         )
         rendered = _render_tree_to_str(FlowTreeVisualizer(ctx).build_tree())
         assert "myParam" in rendered
@@ -354,7 +387,8 @@ class TestFlowTreeVisualizer:
 
     def test_empty_flow_builds_without_error(self):
         empty_flow = {
-            "flow": {
+            "flow_id": "projects/p/l/a/flows/f1",
+            "flow_data": {
                 "name": "projects/p/l/a/flows/f1",
                 "displayName": "Empty",
                 "transitionRoutes": [],
@@ -362,6 +396,8 @@ class TestFlowTreeVisualizer:
             },
             "pages": [],
         }
-        ctx = FlowDependencyResolver(MINIMAL_AGENT_DATA).resolve(empty_flow)
+        ctx = FlowDependencyResolver(
+            DFCXAgentIR(**MINIMAL_AGENT_DATA)
+        ).resolve(DFCXFlowModel(**empty_flow))
         tree = FlowTreeVisualizer(ctx).build_tree()
         assert isinstance(tree, Tree)

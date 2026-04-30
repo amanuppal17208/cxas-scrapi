@@ -16,6 +16,8 @@ import logging
 import re
 from typing import Any, Dict, List, Tuple
 
+from cxas_scrapi.migration.data_models import DFCXAgentIR
+
 logger = logging.getLogger(__name__)
 
 
@@ -179,7 +181,7 @@ class DFCXParameterExtractor:
 
     @staticmethod
     def migrate_parameters(
-        source_agent_data: Dict[str, Any], reporter: Any
+        source_agent_data: DFCXAgentIR, reporter: Any
     ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
         """Aggregates all unique parameters across the agent data."""
         logger.info(
@@ -195,7 +197,7 @@ class DFCXParameterExtractor:
         )
 
         # PASS 1: EXPLICIT DECLARATIONS
-        for playbook in source_agent_data.get("playbooks", []):
+        for playbook in source_agent_data.playbooks:
             for param in playbook.get(
                 "inputParameterDefinitions", []
             ) + playbook.get("outputParameterDefinitions", []):
@@ -216,9 +218,9 @@ class DFCXParameterExtractor:
                     parameter_name_map,
                 )
 
-        for flow_wrapper in source_agent_data.get("flows", []):
-            for page_wrapper in flow_wrapper.get("pages", []):
-                page = page_wrapper.get("value", page_wrapper)
+        for flow_wrapper in source_agent_data.flows:
+            for page_wrapper in flow_wrapper.pages:
+                page = page_wrapper.page_data
                 for param in page.get("form", {}).get(
                     "parameters", []
                 ) + page.get("slots", []):
@@ -249,7 +251,7 @@ class DFCXParameterExtractor:
 
         # PASS 2: DEEP AST-STYLE TRAVERSAL
         DFCXParameterExtractor.deep_scan_for_variables(
-            source_agent_data,
+            source_agent_data.model_dump(),
             var_pattern,
             unified_parameters,
             parameter_name_map,

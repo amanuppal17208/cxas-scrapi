@@ -27,7 +27,8 @@ from cxas_scrapi.cli import app as cli_app
 
 @pytest.fixture
 def mock_apps_client():
-    with mock.patch("cxas_scrapi.cli.app.Apps") as mock_apps_class:
+    with mock.patch(
+        "cxas_scrapi.cli.app.Apps", autospec=True) as mock_apps_class:
         mock_instance = mock_apps_class.return_value
         yield mock_instance
 
@@ -36,6 +37,7 @@ def mock_apps_client():
 def mock_common_get_project_id():
     with mock.patch(
         "cxas_scrapi.cli.app.Common._get_project_id",
+        autospec=True,
         return_value="dummy-project",
     ) as m:
         yield m
@@ -45,6 +47,7 @@ def mock_common_get_project_id():
 def mock_common_get_location():
     with mock.patch(
         "cxas_scrapi.cli.app.Common._get_location",
+        autospec=True,
         return_value="dummy-location",
     ) as m:
         yield m
@@ -117,7 +120,7 @@ def test_apps_get(
     cli_app.apps_get(args)
 
     mock_apps_client.get_app.assert_called_once_with(
-        app_id="projects/test-project/locations/us/apps/123"
+        app_name="projects/test-project/locations/us/apps/123"
     )
     captured = capsys.readouterr()
     assert "My App" in captured.out
@@ -202,8 +205,12 @@ def test_app_branch(
         location="us",
     )
 
-    # Mock export
-    dummy_zip_bytes = b"dummy_zip_data"
+    # Create a dummy zip file in memory representing the LRO response
+    dummy_zip_io = io.BytesIO()
+    with zipfile.ZipFile(dummy_zip_io, "w") as zf:
+        zf.writestr("app.yaml", "name: Branched App")
+    dummy_zip_bytes = dummy_zip_io.getvalue()
+
     mock_export_lro = mock.MagicMock()
     mock_export_response = mock.MagicMock()
     mock_export_response.app_content = dummy_zip_bytes
@@ -222,9 +229,10 @@ def test_app_branch(
     mock_apps_client.export_app.assert_called_once_with(
         app_name="projects/test-project/locations/us/apps/source-id"
     )
-    mock_apps_client.import_as_new_app.assert_called_once_with(
-        app_content=dummy_zip_bytes, display_name="Branched App"
-    )
+    mock_apps_client.import_as_new_app.assert_called_once()
+    call_args = mock_apps_client.import_as_new_app.call_args[1]
+    assert call_args["display_name"] == "Branched App"
+    assert "app_content" in call_args
 
 
 def test_app_delete_by_app_id(
