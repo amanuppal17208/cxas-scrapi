@@ -97,6 +97,7 @@ setup(
         "graphviz",
         "rich",
         "google-cloud-dialogflow-cx",
+        "nest_asyncio",
     ],
     entry_points={
         "console_scripts": [
