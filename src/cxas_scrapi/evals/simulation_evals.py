@@ -34,6 +34,8 @@ from cxas_scrapi.core.tools import Tools
 from cxas_scrapi.prompts import llm_user_prompts
 from cxas_scrapi.utils.eval_utils import (
     Conversation as GoldenConversation,
+)
+from cxas_scrapi.utils.eval_utils import (
     Conversations as GoldenConversations,
 )
 from cxas_scrapi.utils.eval_utils import (
@@ -799,13 +801,17 @@ class SimulationEvals(Apps):
                 tc_obj.output = response
                 break
 
-    def _handle_text_chunk(self, chunk: Dict[str, Any], turn: Turn) -> None:
+    def _handle_text_chunk(
+        self, chunk: Dict[str, Any], turn: Turn
+    ) -> None:
         """Processes a text chunk from the platform response."""
         text = chunk.get("text", "").strip()
         if text:
             self._add_agent_text(turn, text)
 
-    def _handle_tool_call_chunk(self, chunk: Dict[str, Any], turn: Turn) -> None:
+    def _handle_tool_call_chunk(
+        self, chunk: Dict[str, Any], turn: Turn
+    ) -> None:
         """Processes a tool call chunk from the platform response."""
         tc = chunk["tool_call"]
         tool_name = tc.get("display_name") or tc.get("tool")
@@ -835,14 +841,18 @@ class SimulationEvals(Apps):
             ToolCall(action="transfer_to_agent", args={"agent": target})
         )
 
-    def _handle_payload_chunk(self, chunk: Dict[str, Any], turn: Turn) -> None:
+    def _handle_payload_chunk(
+        self, chunk: Dict[str, Any], turn: Turn
+    ) -> None:
         """Processes a custom payload chunk from the platform response."""
         # Custom payloads don't have a direct field in Turn/ToolCall model
         # for golden export usually, but we could add to agent text as a note
         payload = Sessions._expand_pb_struct(chunk.get("payload", {}))
         self._add_agent_text(turn, f"[Custom Payload]: {json.dumps(payload)}")
 
-    def _process_platform_chunk(self, chunk: Dict[str, Any], turn: Turn) -> None:
+    def _process_platform_chunk(
+        self, chunk: Dict[str, Any], turn: Turn
+    ) -> None:
         """Dispatches platform chunks to their respective handlers."""
         if "text" in chunk:
             self._handle_text_chunk(chunk, turn)
@@ -906,6 +916,21 @@ class SimulationEvals(Apps):
                 current_turn = Turn(tool_calls=[])
                 turns.append(current_turn)
             self._add_agent_text(current_turn, line[12:].strip())
+        elif line.startswith("Agent Transfer: "):
+            if not current_turn:
+                current_turn = Turn(tool_calls=[])
+                turns.append(current_turn)
+            target = line[16:].strip().removeprefix("Transferred to ")
+            current_turn.tool_calls.append(
+                ToolCall(action="transfer_to_agent", args={"agent": target})
+            )
+        elif line.startswith("Custom Payload: "):
+            if not current_turn:
+                current_turn = Turn(tool_calls=[])
+                turns.append(current_turn)
+            self._add_agent_text(
+                current_turn, f"[Custom Payload]: {line[16:].strip()}"
+            )
 
         return current_turn
 

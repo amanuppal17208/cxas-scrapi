@@ -25,8 +25,8 @@ from cxas_scrapi.evals.simulation_evals import (
     Step,
     StepProgress,
     StepStatus,
-    Turn,
     ToolCall,
+    Turn,
 )
 from cxas_scrapi.utils.eval_utils import (
     ExpectationResult,
@@ -472,7 +472,9 @@ def test_llm_user_check_conversation_status_max_turns():
     test_case = {
         "steps": [{"goal": "greet"}],
     }
-    conv = LLMUserConversation(mock_genai_client, "model", test_case, max_turns=2)
+    conv = LLMUserConversation(
+        mock_genai_client, "model", test_case, max_turns=2
+    )
     conv.current_turn = 2
     assert conv._check_conversation_status() is False
 
@@ -517,11 +519,19 @@ def test_simulation_evals_get_turns_from_local_trace():
     with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
         with patch("cxas_scrapi.core.apps.AgentServiceClient"):
             evals = SimulationEvals(app_name=app_name)
-    trace = ["User: Hi", "Agent Text: Hello there"]
+    trace = [
+        "User: Hi",
+        "Agent Text: Hello there",
+        "Agent Transfer: Transferred to live_agent",
+        "Custom Payload: {\"key\": \"value\"}"
+    ]
     turns = evals._get_turns_from_local_trace(trace)
     assert len(turns) == 1
     assert turns[0].user == "Hi"
-    assert turns[0].agent == "Hello there"
+    assert "Hello there" in turns[0].agent
+    assert turns[0].tool_calls[0].action == "transfer_to_agent"
+    assert turns[0].tool_calls[0].args["agent"] == "live_agent"
+    assert any("[Custom Payload]" in text for text in turns[0].agent)
 
 
 def test_simulation_evals_process_platform_chunk_text():

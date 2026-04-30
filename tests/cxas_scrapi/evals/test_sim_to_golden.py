@@ -35,12 +35,31 @@ class TestSimToGolden(unittest.TestCase):
         self.sim_evals.app_name = self.app_name
         self.sim_evals.creds = MagicMock()
 
-        # Bind the real method to the mock instance
-        self.sim_evals.export_results_to_golden = (
-            SimulationEvals.export_results_to_golden.__get__(
-                self.sim_evals, SimulationEvals
+        # Bind refactored methods to the mock instance so they can be called
+        # internally
+        methods_to_bind = [
+            "export_results_to_golden",
+            "_get_turns",
+            "_get_turns_from_platform",
+            "_get_turns_from_local_trace",
+            "_parse_platform_messages",
+            "_process_platform_chunk",
+            "_handle_text_chunk",
+            "_handle_tool_call_chunk",
+            "_handle_tool_response_chunk",
+            "_handle_agent_transfer_chunk",
+            "_handle_payload_chunk",
+            "_match_tool_response",
+            "_add_agent_text",
+            "_parse_trace_line",
+        ]
+        for method_name in methods_to_bind:
+            method = getattr(SimulationEvals, method_name)
+            setattr(
+                self.sim_evals,
+                method_name,
+                method.__get__(self.sim_evals, SimulationEvals),
             )
-        )
 
     @patch('cxas_scrapi.evals.simulation_evals.ConversationHistory')
     def test_export_results_to_golden(self, mock_ch_class):
