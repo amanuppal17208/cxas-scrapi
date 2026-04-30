@@ -25,6 +25,8 @@ from cxas_scrapi.evals.simulation_evals import (
     Step,
     StepProgress,
     StepStatus,
+    Turn,
+    ToolCall,
 )
 from cxas_scrapi.utils.eval_utils import (
     ExpectationResult,
@@ -385,3 +387,151 @@ def test_simulation_report_rendering():
     html_report = report._repr_html_()
     assert "<h3>Goal Progress</h3>" in html_report
     assert "<h3>Expectations</h3>" in html_report
+
+
+# Granular unit tests for refactored components
+
+def test_llm_user_check_conversation_status_continue():
+    mock_genai_client = MagicMock()
+    test_case = {
+        "steps": [{"goal": "greet"}],
+    }
+    conv = LLMUserConversation(mock_genai_client, "model", test_case)
+    assert conv._check_conversation_status() is True
+
+
+def test_llm_user_check_conversation_status_max_turns():
+    mock_genai_client = MagicMock()
+    test_case = {
+        "steps": [{"goal": "greet"}],
+    }
+    conv = LLMUserConversation(mock_genai_client, "model", test_case, max_turns=2)
+    conv.current_turn = 2
+    assert conv._check_conversation_status() is False
+
+
+def test_llm_user_handle_first_turn():
+    mock_genai_client = MagicMock()
+    test_case = {
+        "steps": [{"goal": "greet", "static_utterance": "Hello"}],
+        "session_parameters": {"user_id": "123"}
+    }
+    conv = LLMUserConversation(mock_genai_client, "model", test_case)
+    utterance, params = conv._handle_first_turn()
+    assert utterance == "Hello"
+    assert params["user_id"] == "123"
+
+
+def test_simulation_evals_add_agent_text():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    turn = Turn(tool_calls=[])
+    evals._add_agent_text(turn, "Hello")
+    assert turn.agent == "Hello"
+    evals._add_agent_text(turn, "World")
+    assert turn.agent == ["Hello", "World"]
+
+
+def test_simulation_evals_match_tool_response():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    tc = ToolCall(action="my_tool", args={})
+    turn = Turn(tool_calls=[tc])
+    evals._match_tool_response(turn, "my_tool", {"res": "ok"})
+    assert tc.output == {"res": "ok"}
+
+
+def test_simulation_evals_get_turns_from_local_trace():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    trace = ["User: Hi", "Agent Text: Hello there"]
+    turns = evals._get_turns_from_local_trace(trace)
+    assert len(turns) == 1
+    assert turns[0].user == "Hi"
+    assert turns[0].agent == "Hello there"
+
+
+def test_simulation_evals_process_platform_chunk_text():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    turn = Turn(tool_calls=[])
+    evals._process_platform_chunk({"text": "Hello"}, turn)
+    assert turn.agent == "Hello"
+
+
+def test_simulation_evals_process_platform_chunk_tool_call():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    turn = Turn(tool_calls=[])
+    chunk = {"tool_call": {"display_name": "my_tool", "args": {"a": 1}}}
+    evals._process_platform_chunk(chunk, turn)
+    assert len(turn.tool_calls) == 1
+    assert turn.tool_calls[0].action == "my_tool"
+
+
+def test_simulation_evals_process_platform_chunk_agent_transfer():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    turn = Turn(tool_calls=[])
+    chunk = {"agent_transfer": {"display_name": "live_agent"}}
+    evals._process_platform_chunk(chunk, turn)
+    assert len(turn.tool_calls) == 1
+    assert turn.tool_calls[0].action == "transfer_to_agent"
+    assert turn.tool_calls[0].args["agent"] == "live_agent"
+
+
+def test_simulation_evals_process_platform_chunk_payload():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    turn = Turn(tool_calls=[])
+    chunk = {"payload": {"key": "value"}}
+    evals._process_platform_chunk(chunk, turn)
+    assert "[Custom Payload]" in turn.agent
+
+
+def test_simulation_evals_parse_platform_messages():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    messages = [
+        {"role": "user", "chunks": [{"text": "Hello"}]},
+        {"role": "agent", "chunks": [{"text": "Hi! How can I help?"}]}
+    ]
+    turns = []
+    evals._parse_platform_messages(messages, turns)
+    assert len(turns) == 1
+    assert turns[0].user == "Hello"
+    assert turns[0].agent == "Hi! How can I help?"
+
+
+def test_simulation_evals_get_turns_fallback():
+    app_name = "projects/p/locations/l/apps/a"
+    with patch("cxas_scrapi.evals.simulation_evals.GeminiGenerate"):
+        with patch("cxas_scrapi.core.apps.AgentServiceClient"):
+            evals = SimulationEvals(app_name=app_name)
+    res = {
+        "session_id": "sid",
+        "detailed_trace": ["User: Hi", "Agent Text: Hello"]
+    }
+    with patch.object(
+        evals, "_get_turns_from_platform", side_effect=Exception("Failed")
+    ):
+        turns = evals._get_turns(res)
+        assert len(turns) == 1
+        assert turns[0].user == "Hi"
+        assert turns[0].agent == "Hello"
